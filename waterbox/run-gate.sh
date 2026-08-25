@@ -164,6 +164,41 @@ else
 	echo "PASS cue ($cdframes frames, cue/bin pair through plain mounts, native==sandbox==rerecord)"
 fi
 
+# ---- the cd-swap leg -------------------------------------------------------
+# Two discs in the drive's swap list (the rom2..romN convention). Disc 2 goes
+# in at frame 100 - through the actual Swap CD buttons in the sandbox, the
+# driver's direct channel natively - its file is typed, the ORIGINAL disc
+# returns at frame 300 (the previous-disc path) during a typed pause, and its
+# file is typed too. Both commands succeed only if both swaps landed; the
+# differential run without swapping fails the first command and passes the
+# second, so the digests must differ.
+python3 "$here/tests/gen-testiso.py" "$work/disc2.iso" "HELLO2.TXT=@THE SECOND DISC SPEAKS" >/dev/null
+swapframes=600
+swaptype='type D:\HELLO2.TXT
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~type D:\HELLO.TXT
+'
+nat="$(timeout 900 "$rn" --workdir "$work/swap" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --gate --swap-cd 100:1 --swap-cd 300:0 --type "$swaptype" 2>/dev/null | digests)"
+natnoswap="$(timeout 900 "$rn" --workdir "$work/swap0" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --gate --type "$swaptype" 2>/dev/null | digests)"
+box="$(timeout 1200 "$rw" "$core" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --swap-cd 100:1 --swap-cd 300:0 --type "$swaptype" 2>/dev/null | digests)"
+rr="$(timeout 3600 "$rw" "$core" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --swap-cd 100:1 --swap-cd 300:0 --type "$swaptype" --rerecord 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL cdswap (a run produced no digests)"; fail=1
+elif [ "$nat" = "$natnoswap" ]; then
+	echo "FAIL cdswap (swapping discs changed nothing)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL cdswap (native vs sandbox)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$box" != "$rr" ]; then
+	echo "FAIL cdswap (rerecord diverges)"
+	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+else
+	echo "PASS cdswap ($swapframes frames, disc 2 in and back out through the swap buttons, native==sandbox==rerecord)"
+fi
+
 # ---- the input leg ---------------------------------------------------------
 # Mouse and joystick, witnessed by tiny hand-assembled DOS programs delivered
 # on the test CD (gen-testcom.py): JOYTEST renders the game port's button

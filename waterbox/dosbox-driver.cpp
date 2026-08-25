@@ -108,7 +108,15 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	for (const char *e : floppyExts) {
 		if (m.romExt == e) { conf += std::string("imgmount a rom -t floppy\n"); break; }
 	}
-	if (m.romExt == ".iso" || m.romExt == ".cue") conf += "imgmount d rom -t iso\n";
+	if (m.romExt == ".iso" || m.romExt == ".cue") {
+		// extra discs (the rom2..romN convention) join the same mount as a
+		// swap list; the disk-swap input controls cycle through them
+		conf += "imgmount d rom";
+		for (int32_t i = 0; i < m.extraDiscCount; i++) {
+			conf += " rom" + std::to_string(i + 2);
+		}
+		conf += " -t iso\n";
+	}
 	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
 
 	if (!m.extraConf.empty()) {

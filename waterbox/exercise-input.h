@@ -18,6 +18,7 @@
 #define EX_BTN_JOY1 100 /* up down left right b1 b2 */
 #define EX_BTN_JOY2 106
 #define EX_BTN_MOUSE 112 /* left middle right */
+#define EX_BTN_SWAP 115  /* prevFD nextFD swapFD prevCD nextCD swapCD */
 
 typedef struct {
 	int32_t posX, posY, spdX, spdY;

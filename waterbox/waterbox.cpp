@@ -166,6 +166,18 @@ ECL_EXPORT int Init(void)
 		}
 	} else if (haveRom) {
 		m.romExt = romExt; // a floppy or disc image: composed into imgmount
+		if (romExt == ".iso" || romExt == ".cue") {
+			// additional discs, mounted by the host as rom2..romN (the
+			// multi-file convention the game descriptor will formalize)
+			for (int i = 2; i <= 8; i++) {
+				char name[8];
+				snprintf(name, sizeof name, "rom%d", i);
+				FILE *f = fopen(name, "rb");
+				if (f == nullptr) break;
+				fclose(f);
+				m.extraDiscCount++;
+			}
+		}
 	}
 
 	// a formatted disk from settings, when the file itself is not one

@@ -43,6 +43,7 @@ struct DosDrvMachine {
 	int32_t memsizeMB = -1;  // -1 = the preset's value
 	int32_t cpuCycles = -1;  // -1 = the preset's value
 	std::string romExt;      // lowercased extension of the loaded file ("" = none)
+	int32_t extraDiscCount = 0; // additional discs mounted as rom2..romN (swappable)
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
 	std::string extraConf;   // appended last (a .conf rom's text)
 };

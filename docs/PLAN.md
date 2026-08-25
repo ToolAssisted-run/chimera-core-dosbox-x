@@ -409,5 +409,18 @@ build/meson-native` produces run-native. Patches overlay at every
       exports on the other, differential + native==sandbox==rerecord.
       Gate is now SEVEN legs (boot, hdd, preset, cd, cue,
       input:joystick, input:mouse), ~56s wall.
+      LIVE CD SWAPPING done the same day: extra discs mount as
+      rom2..romN (the convention the descriptor will formalize), the
+      guest probes them and composes one imgmount swap list, and the
+      gate's cdswap leg puts disc 2 in through the ACTUAL Swap CD
+      buttons (next+swap rising together), reads it, brings disc 1 back
+      through the previous-disc path during a typed pause, and reads
+      that too - differential plus native==sandbox==rerecord. This
+      needed a miniBox relaxation (commit 4ed92d8): opens became
+      handles, so READ-ONLY mounts open concurrently with independent
+      positions - a two-disc drive holds both images open, which the
+      old one-open rule failed mid-boot; writable mounts stay
+      single-open. Gate is EIGHT legs, ~65s. run-wbx grew --dump-video.
       Remaining: CHD + CD audio with real content, floppy swapping
-      (needs multiple floppies = the descriptor), the user's movies.
+      exercise (same buttons, needs multi-floppy content), the user's
+      movies.

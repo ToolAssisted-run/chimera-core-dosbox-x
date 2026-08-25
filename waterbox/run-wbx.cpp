@@ -23,6 +23,22 @@
 #include "exercise-input.h"
 #include <keyboard.h> // KBD_* values; no other dosbox headers needed
 
+static bool writeTga(const char *path, const uint32_t *bgra, int w, int h)
+{
+	FILE *f = fopen(path, "wb");
+	if (!f) return false;
+	uint8_t hdr[18] = {0};
+	hdr[2] = 2;
+	hdr[12] = w & 0xff; hdr[13] = (w >> 8) & 0xff;
+	hdr[14] = h & 0xff; hdr[15] = (h >> 8) & 0xff;
+	hdr[16] = 32;
+	hdr[17] = 0x20;
+	fwrite(hdr, 1, 18, f);
+	fwrite(bgra, 4, (size_t)w * h, f);
+	fclose(f);
+	return true;
+}
+
 static uint64_t fnv(uint64_t h, const void *p, size_t n)
 {
 	const uint8_t *b = (const uint8_t *)p;
@@ -137,8 +153,10 @@ int main(int argc, char **argv)
 {
 	const char *wbxPath = nullptr, *rom = nullptr;
 	const char *typeText = nullptr, *savedataOut = nullptr;
+	const char *dumpPrefix = nullptr;
 	const char *preset = nullptr, *formattedHdd = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
+	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedule
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
 	bool rerecord = false, joysticks = false, exercise = false;
@@ -148,11 +166,17 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--preset") && i + 1 < argc) preset = argv[++i];
 		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
 		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
+		else if (!strcmp(argv[i], "--swap-cd") && i + 1 < argc) {
+			long fr = 0; int idx = 0;
+			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-cd wants FRAME:INDEX\n"); return 2; }
+			swapCd.push_back({ fr, idx });
+		}
 		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) memsize = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) cycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = strtol(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--type") && i + 1 < argc) typeText = argv[++i];
 		else if (!strcmp(argv[i], "--savedata-out") && i + 1 < argc) savedataOut = argv[++i];
+		else if (!strcmp(argv[i], "--dump-video") && i + 1 < argc) dumpPrefix = argv[++i];
 		else if (!strcmp(argv[i], "--rerecord")) rerecord = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
@@ -255,6 +279,8 @@ int main(int argc, char **argv)
 	size_t typePos = 0;
 	int typePhase = 0;
 	int prevKey = -1, prevShift = 0;
+	int pendingShadow = 0; // mirrors the guest's disk-swap selection
+	bool swapHeld = false;
 
 	for (long i = 0; i < frames; i++) {
 		if (rerecord) {
@@ -287,6 +313,27 @@ int main(int argc, char **argv)
 			prevShift = shift;
 		}
 
+		// scheduled CD swaps, through the SWAP BUTTONS exactly as a player
+		// would press them: a selector step and Swap CD rising together
+		// (the guest steps the pending index before applying the swap, so
+		// one frame moves one disc). The schedule's frame is when the
+		// driver receives the change, matching run-native's direct path.
+		if (swapHeld) {
+			SetButton(EX_BTN_SWAP + 3, 0); // prev CD
+			SetButton(EX_BTN_SWAP + 4, 0); // next CD
+			SetButton(EX_BTN_SWAP + 5, 0); // swap CD
+			swapHeld = false;
+		}
+		for (const auto &sc : swapCd) {
+			if (sc.first != i) continue;
+			int steps = sc.second - pendingShadow;
+			if (steps > 1 || steps < -1) { fprintf(stderr, "--swap-cd steps > 1 not supported\n"); return 2; }
+			if (steps > 0) SetButton(EX_BTN_SWAP + 4, 1);
+			if (steps < 0) SetButton(EX_BTN_SWAP + 3, 1);
+			SetButton(EX_BTN_SWAP + 5, 1);
+			pendingShadow = sc.second;
+			swapHeld = true;
+		}
 		if (exercise) {
 			// the shared pattern, driven exactly as the frontend drives the
 			// guest: axes through SetAxis, button LEVELS through SetButton
@@ -313,6 +360,11 @@ int main(int argc, char **argv)
 		const void *audio = (const void *)GetAudio();
 		if (video) vh = fnv(vh, video, (size_t)w * hgt * 4);
 		ah = fnv(ah, audio, (size_t)nsamp * 4);
+		if (dumpPrefix && video) {
+			char path[1024];
+			snprintf(path, sizeof path, "%s%05ld.tga", dumpPrefix, i);
+			writeTga(path, (const uint32_t *)video, w, hgt);
+		}
 	}
 
 	printf("frames=%ld\n", frames);
