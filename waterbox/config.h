@@ -47,7 +47,8 @@
 
 /* Define to 1 if you want parallel pass-through support (Win32, Linux and
    BSD). */
-#define C_DIRECTLPT 1
+/* wbx: no host hardware in a deterministic core */
+/* #undef C_DIRECTLPT */
 
 /* Define to 1 if you want serial pass-through support (Win32, Posix and
    OS/2). */

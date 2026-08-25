@@ -19,7 +19,7 @@ project('chimera-core-dosbox-x', ['c', 'cpp'],
 run_command(files('waterbox/overlay-patches.sh'), check: true)
 
 defs = [
-  '-DNDEBUG',
+  '-DNDEBUG', '-DZSTD_DISABLE_ASM=1',
   '-DSDL_BUILD_MAJOR_VERSION=2', '-DSDL_BUILD_MINOR_VERSION=32',
   '-DSDL_BUILD_MICRO_VERSION=0', '-DHAVE_LINUX_VERSION_H',
   '-DUSING_GENERATED_CONFIG_H', '-D__LINUX__', '-D__INLINE__=inline',
@@ -32,6 +32,7 @@ add_project_arguments(defs + quiet, language: ['c', 'cpp'])
 
 inc = include_directories(
   'waterbox',
+  'extern/dosbox-x/vs/zlib',
   'extern/vendored/SDL2/include',
   'extern/vendored/SDL2/src',
   'extern/vendored/libco',
@@ -521,13 +522,35 @@ dosbox_sources = files(
   'extern/dosbox-x/src/builtin/ipspatch.cpp',
   'extern/dosbox-x/src/builtin/ipsmake.cpp',
   'extern/dosbox-x/src/hardware/cqm.c',
-  'extern/dosbox-x/src/hardware/parport/directlpt.cpp',
   'extern/dosbox-x/src/libs/libchdr/lzma/Alloc.c',
   'extern/dosbox-x/src/libs/libchdr/lzma/LzmaDec.c',
   'extern/dosbox-x/src/libs/libchdr/lzma/LzmaEnc.c',
   'extern/dosbox-x/src/libs/libchdr/lzma/LzFind.c',
   'extern/dosbox-x/src/libs/libchdr/lzma/CpuArch.c',
   'extern/dosbox-x/src/libs/libchdr/lzma/Sort.c',
+  'extern/dosbox-x/vs/zlib/adler32.c',
+  'extern/dosbox-x/vs/zlib/compress.c',
+  'extern/dosbox-x/vs/zlib/crc32.c',
+  'extern/dosbox-x/vs/zlib/deflate.c',
+  'extern/dosbox-x/vs/zlib/infback.c',
+  'extern/dosbox-x/vs/zlib/inffast.c',
+  'extern/dosbox-x/vs/zlib/inflate.c',
+  'extern/dosbox-x/vs/zlib/inftrees.c',
+  'extern/dosbox-x/vs/zlib/trees.c',
+  'extern/dosbox-x/vs/zlib/uncompr.c',
+  'extern/dosbox-x/vs/zlib/zutil.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/debug.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/entropy_common.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/error_private.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/fse_decompress.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/pool.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/threading.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/xxhash.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/common/zstd_common.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/decompress/huf_decompress.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/decompress/zstd_ddict.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/decompress/zstd_decompress_block.c',
+  'extern/dosbox-x/src/libs/libchdr/zstd/decompress/zstd_decompress.c',
 )
 
 # libchdr inlines its own dr_flac; DRFLAC_API=static keeps that copy's
@@ -539,13 +562,48 @@ chdflac = static_library('chdflac',
 
 driver_sources = files('waterbox/dosbox-driver.cpp')
 
-zdep = dependency('zlib')
-zstd = dependency('libzstd')
-threads = dependency('threads')
-dl = meson.get_compiler('c').find_library('dl', required: false)
+if meson.is_cross_build()
+  # ---- the guest: core.wbx ------------------------------------------------
+  # miniBox's musl/libstdc++ toolchain arrives through the cross file
+  # (waterbox/setup-guest.sh); the link recipe is the guest kit's - library
+  # order, --no-relax for the large code model, the weak pthread pulls for
+  # libgcc_eh, cxxglue for the unwinder, and an 8MB default thread stack.
+  mb = meson.get_external_property('minibox_dir')
+  mbuild = meson.get_external_property('minibox_build')
+  sr = meson.get_external_property('guest_sysroot')
 
-executable('run-native',
-  dosbox_sources + driver_sources + files('waterbox/run-native.cpp'),
-  include_directories: inc,
-  link_with: [chdflac],
-  dependencies: [zdep, zstd, threads, dl])
+  executable('core', dosbox_sources + driver_sources +
+      files('waterbox/waterbox.cpp', 'waterbox/guest-syscalls.cpp'),
+    name_suffix: 'wbx',
+    include_directories: inc,
+    link_with: [chdflac],
+    link_args: [
+      '-static', '-no-pie',
+      '-Wl,--eh-frame-hdr', '-Wl,-O2', '-Wl,--no-relax', '-Wl,-z,stack-size=8388608',
+      '-T', mb / 'source/guest/linkscript.T',
+      '-Wl,-u,pthread_once', '-Wl,-u,pthread_cond_wait',
+      '-Wl,-u,pthread_cond_broadcast', '-Wl,-u,pthread_key_create',
+      mbuild / 'source/guest/cxxglue.c.o',
+      mbuild / 'source/guest/emulibc.c.o',
+      '-L' + sr / 'lib', '-lstdc++', '-lgcc', '-lgcc_eh', '-lc'])
+else
+  # ---- the native reference: run-native -----------------------------------
+  threads = dependency('threads')
+  dl = meson.get_compiler('c').find_library('dl', required: false)
+
+  executable('run-native',
+    dosbox_sources + driver_sources + files('waterbox/run-native.cpp'),
+    include_directories: inc,
+    link_with: [chdflac],
+    dependencies: [threads, dl])
+
+  # run-wbx: the standalone sandbox driver the gate uses. Needs miniBox's
+  # host library; configure with -Dminibox_dir=<checkout> to build it.
+  mbdir = get_option('minibox_dir')
+  if mbdir != ''
+    mbhost = mbdir / 'build/meson-linux/source/host'
+    executable('run-wbx', files('waterbox/run-wbx.cpp'),
+      include_directories: [inc, include_directories(mbdir / 'source/host')],
+      link_args: [mbhost / 'libminiboxhost.so', '-Wl,-rpath,' + mbhost])
+  endif
+endif

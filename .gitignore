@@ -9,3 +9,4 @@ waterbox/tests/work/
 *.wbx
 build/
 work-native/
+waterbox/tests/work/

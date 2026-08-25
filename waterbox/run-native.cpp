@@ -119,6 +119,7 @@ int main(int argc, char **argv)
 	const char *workdir = "work-native";
 	const char *dumpPrefix = nullptr;
 	const char *typeText = nullptr;
+	const char *savedataOut = nullptr;
 	uint64_t hddGrow = 0;
 	int frames = 600;
 	bool gate = false, verbose = false, joysticks = false;
@@ -133,6 +134,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--workdir") && i + 1 < argc) workdir = argv[++i];
 		else if (!strcmp(argv[i], "--dump-video") && i + 1 < argc) dumpPrefix = argv[++i];
 		else if (!strcmp(argv[i], "--type") && i + 1 < argc) typeText = argv[++i];
+		else if (!strcmp(argv[i], "--savedata-out") && i + 1 < argc) savedataOut = argv[++i];
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
@@ -242,6 +244,22 @@ int main(int argc, char **argv)
 			printf("domain[%s]=%016llx\n", dn, (unsigned long long)fnv1a(dd, ds));
 		}
 	}
+	if (savedataOut) {
+		// the savedata export, flattened for the gate to diff: one file,
+		// the whole writable disk image
+		if (dosdrv_hdd_size() != 0) {
+			mkdir(savedataOut, 0777);
+			std::string path = std::string(savedataOut) + "/HardDiskDrive.img";
+			if (!writeWholeFile(path, dosdrv_hdd_buffer(), (size_t)dosdrv_hdd_size())) {
+				fprintf(stderr, "could not write %s\n", path.c_str());
+				return 1;
+			}
+			printf("savedata=1\n");
+		} else {
+			printf("savedata=0\n");
+		}
+	}
+
 	int rn = 0, rd = 0;
 	dosdrv_refresh_rate(&rn, &rd);
 	printf("refresh=%d/%d ticks=%u\n", rn, rd, dosdrv_ticks_elapsed());
