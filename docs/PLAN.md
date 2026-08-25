@@ -432,4 +432,16 @@ build/meson-native` produces run-native. Patches overlay at every
       differential run on a fresh formatted disk proves the read only
       succeeds because the modification persisted through
       export -> reload. Gate is TEN legs, ~81s.
+      REAL CONTENT arrived (2026-08-25): the user's bootable Alley Cat
+      floppy (tests/roms/, gitignored). This brought the bootDrive sync
+      setting (none/a/c - the last autoexec line becomes `boot a:`,
+      which never returns to the shell) and tests/run-roms.sh, the
+      licensed-content leg: every image in tests/roms/ boots through
+      both builds, digests must be native==sandbox==rerecord, final
+      frames saved for eyeballing; SKIPs when the directory is empty so
+      the public gates never depend on licensed bytes. Alley Cat boots
+      to its IBM title in CGA 640x400 (dynamic video size again), a
+      typed keypress reaches the game's joystick prompt identically in
+      both builds, and the deliberately absurd long filename proved rom
+      staging and rom.name handling clean.
       Remaining: CHD + CD audio with real content, the user's movies.

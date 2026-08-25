@@ -154,7 +154,7 @@ int main(int argc, char **argv)
 	const char *wbxPath = nullptr, *rom = nullptr;
 	const char *typeText = nullptr, *savedataOut = nullptr;
 	const char *dumpPrefix = nullptr;
-	const char *preset = nullptr, *formattedHdd = nullptr;
+	const char *preset = nullptr, *formattedHdd = nullptr, *bootDrive = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
 	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
 	std::vector<std::pair<long, int>> swapFd;
@@ -166,6 +166,7 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
 		else if (!strcmp(argv[i], "--preset") && i + 1 < argc) preset = argv[++i];
 		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
+		else if (!strcmp(argv[i], "--boot-drive") && i + 1 < argc) bootDrive = argv[++i];
 		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--swap-cd") && i + 1 < argc) {
 			long fr = 0; int idx = 0;
@@ -244,6 +245,7 @@ int main(int argc, char **argv)
 	};
 	if (preset) addStr("machinePreset", preset);
 	if (formattedHdd) addStr("formattedHardDisk", formattedHdd);
+	if (bootDrive) addStr("bootDrive", bootDrive);
 	if (memsize != -1000000) addNum("memsizeMB", memsize);
 	if (cycles != -1000000) addNum("cpuCycles", cycles);
 	if (joysticks) { if (settings.size() > 1) settings += ","; settings += "\"joysticksEnabled\":true"; }

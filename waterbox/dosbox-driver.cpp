@@ -124,6 +124,10 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		conf += m.extraConf;
 		conf += "\n";
 	}
+	if (m.bootDrive == "a" || m.bootDrive == "c") {
+		// the very last autoexec line: boot never returns to the shell
+		conf += "\n[autoexec]\nboot " + m.bootDrive + ":\n";
+	}
 	return conf;
 }
 

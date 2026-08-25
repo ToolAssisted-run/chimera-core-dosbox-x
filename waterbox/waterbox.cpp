@@ -129,6 +129,8 @@ ECL_EXPORT int Init(void)
 	int memsizeMB = (int)wbx_setting_double("memsizeMB", -1);
 	int cpuCycles = (int)wbx_setting_double("cpuCycles", -1);
 	bool joysticks = wbx_setting_bool("joysticksEnabled", 0) != 0;
+	char bootDrive[8] = "none";
+	wbx_setting_str("bootDrive", bootDrive, sizeof bootDrive);
 	g_mouseSensitivity = (float)(wbx_setting_double("mouseSensitivity", 100) / 100.0);
 
 	DosDrvConfig cfg;
@@ -140,6 +142,7 @@ ECL_EXPORT int Init(void)
 	m.joysticks = joysticks;
 	m.memsizeMB = memsizeMB;
 	m.cpuCycles = cpuCycles;
+	m.bootDrive = bootDrive;
 
 	// ---- what the loaded file IS ------------------------------------------
 	if (haveRom && romExt == ".hdd") {

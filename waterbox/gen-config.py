@@ -162,6 +162,12 @@ config = {
             "type": "int", "default": -1, "sync": True
         },
         {
+            "name": "bootDrive", "display": "Boot From",
+            "description": "Boot the machine from a mounted drive instead of dropping to the DOS prompt: 'a' boots a bootable floppy image, 'c' boots an operating system installed on the hard disk. 'none' keeps the built-in DOS shell.",
+            "type": "enum", "options": ["none", "a", "c"], "default": "none",
+            "sync": True
+        },
+        {
             "name": "joysticksEnabled", "display": "Joysticks",
             "description": "Whether the two-axis game port joysticks are plugged in.",
             "type": "bool", "default": False, "sync": True
