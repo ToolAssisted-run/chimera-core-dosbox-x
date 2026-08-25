@@ -1,0 +1,42 @@
+This repository is licensed as follows:
+
+- The integration layer and everything else original to this repository
+  (waterbox/*.cpp, *.c, *.h except dosbox-driver.cpp; the build scripts and
+  makefiles; tests/; waterbox.config; default_keybinds.json; docs/) is
+  under the MIT License below.
+
+- patches/ contains modifications to DOSBox-X source files, and
+  dosbox-driver.cpp descends from the BizHawk DOSBox-X port (bizhawk.cpp by
+  this repository's author); both are GPL-2.0-or-later, like DOSBox-X itself
+  (see LICENSE.GPL-2.0).
+
+- DOSBox-X is vendored unmodified as the submodule extern/dosbox-x under its own
+  license (GPL-2.0-or-later).
+
+- BUILT ARTIFACTS (core.wbx and the core package) combine this repository's
+  code with DOSBox-X and are distributed under the GPL-2.0-or-later. The MIT
+  license below permits that combination.
+
+----------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2026 Sergio Martin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
