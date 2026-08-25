@@ -55,8 +55,8 @@ minibox_build = '$mbuild'
 guest_sysroot = '$sr'
 
 [built-in options]
-c_args = ['-specs', '$sr/lib/musl-gcc.specs', '-fvisibility=hidden', '-mcmodel=large', '-mstack-protector-guard=global', '-fno-pic', '-fno-pie', '-fcf-protection=none', '-DCHIMERA_GUEST', '-I$mb/extern/emulibc', '-I$mb/source/guest/include', '-I$mb/extern/jsmn']
-cpp_args = ['-specs', '$sr/lib/musl-gcc.specs', '-fvisibility=hidden', '-mcmodel=large', '-mstack-protector-guard=global', '-fno-pic', '-fno-pie', '-fcf-protection=none', '-fexceptions', '-DCHIMERA_GUEST', '-I$mb/extern/emulibc', '-I$mb/source/guest/include', '-I$mb/extern/jsmn', '-I$sr/include/c++/$gccver', '-I$sr/include/c++/$gccver/x86_64-linux-musl']
+c_args = ['-specs', '$sr/lib/musl-gcc.specs', '-fvisibility=hidden', '-mcmodel=large', '-mstack-protector-guard=global', '-fno-stack-protector', '-fno-pic', '-fno-pie', '-fcf-protection=none', '-DCHIMERA_GUEST', '-I$mb/extern/emulibc', '-I$mb/source/guest/include', '-I$mb/extern/jsmn']
+cpp_args = ['-specs', '$sr/lib/musl-gcc.specs', '-fvisibility=hidden', '-mcmodel=large', '-mstack-protector-guard=global', '-fno-stack-protector', '-fno-pic', '-fno-pie', '-fcf-protection=none', '-fexceptions', '-DCHIMERA_GUEST', '-I$mb/extern/emulibc', '-I$mb/source/guest/include', '-I$mb/extern/jsmn', '-I$sr/include/c++/$gccver', '-I$sr/include/c++/$gccver/x86_64-linux-musl']
 c_link_args = ['-specs', '$sr/lib/musl-gcc.specs']
 cpp_link_args = ['-specs', '$sr/lib/musl-gcc.specs']
 EOF

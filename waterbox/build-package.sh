@@ -32,6 +32,7 @@ chimera_root="$(cd "$chimera_root" && pwd)"
 # the guest, via the meson cross build
 [ -f "$root/build/meson-guest/build.ninja" ] || MINIBOX_DIR="$mb" sh "$here/setup-guest.sh"
 ninja -C "$root/build/meson-guest" core.wbx
+sh "$mb/source/guest/check-wbx.sh" "$root/build/meson-guest/core.wbx"
 
 staging="$root/build/package-staging"
 rm -rf "$staging"
