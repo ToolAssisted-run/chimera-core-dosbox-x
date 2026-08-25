@@ -1,0 +1,6 @@
+[submodule "extern/dosbox-x"]
+	path = extern/dosbox-x
+	url = https://github.com/joncampbell123/dosbox-x.git
+[submodule "extern/jaffarCommon"]
+	path = extern/jaffarCommon
+	url = https://github.com/SergioMartin86/jaffarCommon.git

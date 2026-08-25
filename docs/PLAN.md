@@ -240,6 +240,44 @@ timing to pin.
    movie-recorded input: MAYBE reuse buttons ("Next Disk"), decide with
    the user.
 
+## Rebase log (2026-08-25)
+
+The wbx diff `9215f53..origin/wbx` restricted to src/ + include/, opus
+removals excluded, is 56 functional files. Rebased onto v2026.08.02 into
+`patches/` (line endings normalized to LF on all sides first - the wbx
+branch had normalized files upstream keeps as mixed CRLF, which is most of
+the raw diff's apparent bulk):
+
+- 27 files: upstream untouched between releases -> wbx version copied.
+- 26 files: 3-way merged clean (`git merge-file`).
+- 3 files needed hand resolution:
+  - `dos_mscdex.cpp`: wbx side kept (the whole interface-type switch is
+    dead in the sandbox; CDROM_Interface_Image is forced). Upstream's
+    const-signature change landed outside the conflict.
+  - `drive_fat.cpp`: upstream's restructured constructor (local diskfile,
+    rawsize) kept, with the wbx memfile fallback grafted into its
+    `!diskfile` branch; upstream's new cluster-chain reset AND the wbx
+    drive-light line both kept in fatFile::Close.
+  - `dos_programs.cpp`: six conflicts, all whitespace-triggered in GUI
+    dialog paths; upstream sides taken with the wbx sandbox tweaks
+    re-applied (getcwd commented, CurrentDir initialised, setbuf(newDisk)
+    commented). The wbx ".cdrom" dialog filter entries were deliberately
+    dropped - the .cdrom pseudo-file scheme does not exist here.
+
+Also vendored (author's own work, from the wbx tree / BizHawk):
+- `extern/vendored/SDL2` - the waterbox-modified SDL2 2.32 (signals and
+  sigaction removed; NOT stock, so copied rather than submoduled).
+- `extern/vendored/libco` - the coroutine slice.
+- `waterbox/config.h` - the generated dosbox-x config for this target.
+- `waterbox/conf/` - base + machine-year + OS preset .confs.
+- `waterbox/hdd/` - pre-formatted FAT16 images (zstd, machine-generated).
+- `waterbox/reference/` - the BizHawk driver (bizhawk.cpp/hpp, Makefile)
+  as the porting reference for dosbox-driver.cpp and sources.mk.
+
+NOT audited yet: whether the two upstream releases (06.02 -> 08.02) touch
+the mechanisms the patches hook (Normal_Loop shape, mixer output path,
+keyboard pending queue). The first native build (M1) is that audit.
+
 ## Milestones
 
 - [ ] M1: repo skeleton, extern/dosbox-x @ v2026.08.02, wbx patch set
