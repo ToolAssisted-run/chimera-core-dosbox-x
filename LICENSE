@@ -11,7 +11,14 @@ This repository is licensed as follows:
   (see LICENSE.GPL-2.0).
 
 - DOSBox-X is vendored unmodified as the submodule extern/dosbox-x under its own
-  license (GPL-2.0-or-later).
+  license (GPL-2.0-or-later); jaffarCommon as the submodule extern/jaffarCommon
+  (MIT).
+
+- extern/vendored/ carries third-party code under its own licenses: SDL2
+  (zlib license, lightly modified for the sandbox - signals removed), libco
+  (ISC) and the SDL_net headers (zlib license). waterbox/reference/ preserves
+  the author's original BizHawk-side driver for provenance (MIT, from
+  TASEmulators/BizHawk).
 
 - BUILT ARTIFACTS (core.wbx and the core package) combine this repository's
   code with DOSBox-X and are distributed under the GPL-2.0-or-later. The MIT
