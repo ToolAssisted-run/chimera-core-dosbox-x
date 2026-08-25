@@ -7,3 +7,5 @@ waterbox/obj-guest/
 waterbox/obj-native/
 waterbox/tests/work/
 *.wbx
+build/
+work-native/

@@ -153,7 +153,7 @@
      unsigned int        fn,fd;
  };
  
- static struct mixer_t{
+ struct mixer_t{
      int32_t          work[MIXER_BUFSIZE][2];
      Bitu            work_in,work_out,work_wrap;
      Bitu            pos,done;

@@ -278,13 +278,54 @@ NOT audited yet: whether the two upstream releases (06.02 -> 08.02) touch
 the mechanisms the patches hook (Normal_Loop shape, mixer output path,
 keyboard pending queue). The first native build (M1) is that audit.
 
+## Bring-up log (2026-08-25, native)
+
+The build is MESON (the user's standard): one root meson.build carries the
+curated list for both builds; `meson setup build/meson-native && ninja -C
+build/meson-native` produces run-native. Patches overlay at every
+(re)configure. What the first bring-up established:
+
+- extern/jaffarCommon must stay pinned at 8474151 (the wbx-era API);
+  newer jaffarCommon reshaped MemoryFile and the patched dosbox files
+  would all need porting.
+- Upstream additions the old Makefile list lacked: SDL_sound decoders,
+  libchdr modules + its lzma/, cqm.c, ipspatch/ipsmake, directlpt. libchdr
+  inlines its OWN dr_flac; it builds as a small separate lib with
+  -DDRFLAC_API=static or its globals collide with the SDL_sound flac
+  decoder's.
+- Three new patches beyond the wbx set, all upstream bugs exposed by
+  compiling what their autotools apparently no longer does: a bare
+  `extern "C"` closing SDL_sound_internal.h (poisons the next declaration
+  of any C++ includer), mp3.cpp's commented-out mp3_seek_table.h include
+  (defines mp3_t), and ceil_udivide (lives in dos/cdrom.h; the Staging-
+  imported decoders expect it from support.h). Plus mixer.h's
+  `static struct mixer_t` from the wbx move (invalid C++, g++13 rejects).
+- DETERMINISM: video/audio/VRAM were deterministic immediately; DOS RAM
+  was not, because the CMOS seeds from host time(NULL) at boot. run-native
+  freezes the whole process clock to the SANDBOX EPOCH (1495889068 =
+  2017-05-27 12:44:28 UTC, what miniBox pins) with strong time()/
+  gettimeofday()/clock_gettime() definitions + TZ=UTC; after that, two
+  runs are byte-identical on every digest. The guest gets this for free.
+- The pre-formatted HDD .zst resources hold only the image HEAD (MBR +
+  FATs, ~93KB); the full size comes from growing the memfile
+  (--hdd-grow <enum size>: 21411840, 42823680, 252370944, 527966208,
+  2111864832). That is how BizHawk used them too (the enum VALUE is the
+  byte size).
+- Proven end to end natively: boot to Z:\> (720x400, correct text), the
+  composed conf pipeline, --type keyboard injection through the per-frame
+  press/release sets, imgmount c -> _memFileDirectory -> imageDisk_Mem
+  ("Drive C is mounted as HardDiskDrive.img"), and a DOS
+  `echo saveme > c:\saved.txt` changing the Hard Disk Drive domain digest.
+
 ## Milestones
 
-- [ ] M1: repo skeleton, extern/dosbox-x @ v2026.08.02, wbx patch set
+- [x] M1: repo skeleton, extern/dosbox-x @ v2026.08.02, wbx patch set
       rebased file by file into patches/, native reference build compiles
-      and boots to the DOS prompt under a composed config.
-- [ ] M2: run-native frame loop - video/audio/input digests, deterministic
-      across runs; keyboard/joystick/mouse reach the machine.
+      and boots to the DOS prompt under a composed config. (2026-08-25)
+- [~] M2: run-native frame loop - video/audio/input digests, deterministic
+      across runs; keyboard reaches the machine and the HDD takes writes.
+      Remaining: joystick/mouse exercise, refresh-rate change (a mode-set
+      test), drive-activity flag.
 - [ ] M3: guest build (musl/GCC toolchain), seal + savestate + rerecord
       correctness; run-gate.sh native==sandbox==rerecord green.
 - [ ] M4: HDD memfile + savedata export group + gate leg (a .com writes
