@@ -156,7 +156,8 @@ int main(int argc, char **argv)
 	const char *dumpPrefix = nullptr;
 	const char *preset = nullptr, *formattedHdd = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
-	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedule
+	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
+	std::vector<std::pair<long, int>> swapFd;
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
 	bool rerecord = false, joysticks = false, exercise = false;
@@ -170,6 +171,11 @@ int main(int argc, char **argv)
 			long fr = 0; int idx = 0;
 			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-cd wants FRAME:INDEX\n"); return 2; }
 			swapCd.push_back({ fr, idx });
+		}
+		else if (!strcmp(argv[i], "--swap-fd") && i + 1 < argc) {
+			long fr = 0; int idx = 0;
+			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-fd wants FRAME:INDEX\n"); return 2; }
+			swapFd.push_back({ fr, idx });
 		}
 		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) memsize = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) cycles = atoi(argv[++i]);
@@ -279,7 +285,7 @@ int main(int argc, char **argv)
 	size_t typePos = 0;
 	int typePhase = 0;
 	int prevKey = -1, prevShift = 0;
-	int pendingShadow = 0; // mirrors the guest's disk-swap selection
+	int pendingCdShadow = 0, pendingFdShadow = 0; // mirror the guest's selections
 	bool swapHeld = false;
 
 	for (long i = 0; i < frames; i++) {
@@ -313,27 +319,31 @@ int main(int argc, char **argv)
 			prevShift = shift;
 		}
 
-		// scheduled CD swaps, through the SWAP BUTTONS exactly as a player
-		// would press them: a selector step and Swap CD rising together
-		// (the guest steps the pending index before applying the swap, so
-		// one frame moves one disc). The schedule's frame is when the
-		// driver receives the change, matching run-native's direct path.
+		// scheduled disk swaps, through the SWAP BUTTONS exactly as a
+		// player would press them: a selector step and the swap button
+		// rising together (the guest steps the pending index before
+		// applying the swap, so one frame moves one image). The frame in
+		// the schedule is when the driver receives the change, matching
+		// run-native's direct path. Button block: +0..2 floppy
+		// prev/next/swap, +3..5 CD prev/next/swap.
 		if (swapHeld) {
-			SetButton(EX_BTN_SWAP + 3, 0); // prev CD
-			SetButton(EX_BTN_SWAP + 4, 0); // next CD
-			SetButton(EX_BTN_SWAP + 5, 0); // swap CD
+			for (int b = 0; b < 6; b++) SetButton(EX_BTN_SWAP + b, 0);
 			swapHeld = false;
 		}
-		for (const auto &sc : swapCd) {
-			if (sc.first != i) continue;
-			int steps = sc.second - pendingShadow;
-			if (steps > 1 || steps < -1) { fprintf(stderr, "--swap-cd steps > 1 not supported\n"); return 2; }
-			if (steps > 0) SetButton(EX_BTN_SWAP + 4, 1);
-			if (steps < 0) SetButton(EX_BTN_SWAP + 3, 1);
-			SetButton(EX_BTN_SWAP + 5, 1);
-			pendingShadow = sc.second;
-			swapHeld = true;
-		}
+		auto pressSwap = [&](const std::vector<std::pair<long, int>> &sched, int base, int &shadow) {
+			for (const auto &sc : sched) {
+				if (sc.first != i) continue;
+				int steps = sc.second - shadow;
+				if (steps > 1 || steps < -1) { fprintf(stderr, "swap steps > 1 not supported\n"); exit(2); }
+				if (steps > 0) SetButton(base + 1, 1);
+				if (steps < 0) SetButton(base + 0, 1);
+				SetButton(base + 2, 1);
+				shadow = sc.second;
+				swapHeld = true;
+			}
+		};
+		pressSwap(swapFd, EX_BTN_SWAP + 0, pendingFdShadow);
+		pressSwap(swapCd, EX_BTN_SWAP + 3, pendingCdShadow);
 		if (exercise) {
 			// the shared pattern, driven exactly as the frontend drives the
 			// guest: axes through SetAxis, button LEVELS through SetButton

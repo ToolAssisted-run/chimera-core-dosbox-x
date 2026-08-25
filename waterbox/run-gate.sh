@@ -199,6 +199,78 @@ else
 	echo "PASS cdswap ($swapframes frames, disc 2 in and back out through the swap buttons, native==sandbox==rerecord)"
 fi
 
+# ---- the floppy-swap leg ---------------------------------------------------
+# The cdswap proof on drive A: two machine-generated FAT12 floppies
+# (gen-testfloppy.py) in the swap list, floppy 2 in at frame 100 through the
+# floppy swap buttons, its file typed, floppy 1 back at frame 300 through the
+# previous-disk path, its file typed too. Differential plus
+# native==sandbox==rerecord.
+python3 "$here/tests/gen-testfloppy.py" "$work/fd1.img" HELLO1.TXT "THE FIRST FLOPPY SPEAKS" >/dev/null
+python3 "$here/tests/gen-testfloppy.py" "$work/fd2.img" HELLO2.TXT "THE SECOND FLOPPY SPEAKS" >/dev/null
+fdtype='type A:\HELLO2.TXT
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~type A:\HELLO1.TXT
+'
+nat="$(timeout 900 "$rn" --workdir "$work/fdswap" --rom "$work/fd1.img" --extra-file "rom2=$work/fd2.img" \
+	--frames "$swapframes" --gate --swap-fd 100:1 --swap-fd 300:0 --type "$fdtype" 2>/dev/null | digests)"
+natnoswap="$(timeout 900 "$rn" --workdir "$work/fdswap0" --rom "$work/fd1.img" --extra-file "rom2=$work/fd2.img" \
+	--frames "$swapframes" --gate --type "$fdtype" 2>/dev/null | digests)"
+box="$(timeout 1200 "$rw" "$core" --rom "$work/fd1.img" --extra-file "rom2=$work/fd2.img" \
+	--frames "$swapframes" --swap-fd 100:1 --swap-fd 300:0 --type "$fdtype" 2>/dev/null | digests)"
+rr="$(timeout 3600 "$rw" "$core" --rom "$work/fd1.img" --extra-file "rom2=$work/fd2.img" \
+	--frames "$swapframes" --swap-fd 100:1 --swap-fd 300:0 --type "$fdtype" --rerecord 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL fdswap (a run produced no digests)"; fail=1
+elif [ "$nat" = "$natnoswap" ]; then
+	echo "FAIL fdswap (swapping floppies changed nothing)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL fdswap (native vs sandbox)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$box" != "$rr" ]; then
+	echo "FAIL fdswap (rerecord diverges)"
+	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+else
+	echo "PASS fdswap ($swapframes frames, floppy 2 in and back out through the swap buttons, native==sandbox==rerecord)"
+fi
+
+# ---- the hdd-persistence leg ------------------------------------------------
+# The savedata lifecycle end to end: the hdd leg's run WROTE a file and
+# exported the disk; that exported image now RELOADS as the machine's disk,
+# and typing the file must print what was saved. The differential run types
+# the same command on a fresh formatted disk, where the file does not exist -
+# so the pass proves the modification genuinely persisted through
+# export -> reload. Then native==sandbox==rerecord on the reloaded machine.
+persistframes=500
+persisttype='type C:\SAVED.TXT
+'
+if [ ! -f "$work/sd-nat/HardDiskDrive.img" ]; then
+	echo "FAIL hddpersist (the hdd leg left no exported disk)"; fail=1
+else
+	cp "$work/sd-nat/HardDiskDrive.img" "$work/saved.hdd"
+	nat="$(timeout 900 "$rn" --workdir "$work/persist" --rom "$work/saved.hdd" \
+		--frames "$persistframes" --gate --type "$persisttype" 2>/dev/null | digests)"
+	natfresh="$(timeout 900 "$rn" --workdir "$work/persist0" --formatted-hdd 21mb \
+		--frames "$persistframes" --gate --type "$persisttype" 2>/dev/null | digests)"
+	box="$(timeout 1200 "$rw" "$core" --rom "$work/saved.hdd" \
+		--frames "$persistframes" --type "$persisttype" 2>/dev/null | digests)"
+	rr="$(timeout 3600 "$rw" "$core" --rom "$work/saved.hdd" \
+		--frames "$persistframes" --type "$persisttype" --rerecord 2>/dev/null | digests)"
+	natvid="$(printf '%s\n' "$nat" | grep videoHash)"
+	freshvid="$(printf '%s\n' "$natfresh" | grep videoHash)"
+	if [ -z "$nat" ] || [ -z "$box" ]; then
+		echo "FAIL hddpersist (a run produced no digests)"; fail=1
+	elif [ "$natvid" = "$freshvid" ]; then
+		echo "FAIL hddpersist (the saved file did not survive export and reload)"; fail=1
+	elif [ "$nat" != "$box" ]; then
+		echo "FAIL hddpersist (native vs sandbox)"
+		echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+	elif [ "$box" != "$rr" ]; then
+		echo "FAIL hddpersist (rerecord diverges)"
+		echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+	else
+		echo "PASS hddpersist ($persistframes frames, the write survives export and reload, native==sandbox==rerecord)"
+	fi
+fi
+
 # ---- the input leg ---------------------------------------------------------
 # Mouse and joystick, witnessed by tiny hand-assembled DOS programs delivered
 # on the test CD (gen-testcom.py): JOYTEST renders the game port's button

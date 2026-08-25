@@ -421,6 +421,15 @@ build/meson-native` produces run-native. Patches overlay at every
       positions - a two-disc drive holds both images open, which the
       old one-open rule failed mid-boot; writable mounts stay
       single-open. Gate is EIGHT legs, ~65s. run-wbx grew --dump-video.
-      Remaining: CHD + CD audio with real content, floppy swapping
-      exercise (same buttons, needs multi-floppy content), the user's
-      movies.
+      FLOPPY SWAPPING done the same day, the cdswap proof on drive A:
+      hand-rolled 1.44MB FAT12 floppies (tests/gen-testfloppy.py, one
+      root file each, fixed timestamps), the rom2..romN convention
+      generalized to every swappable image type, --swap-fd in both
+      runners, floppy 2 in and back out through the floppy swap
+      buttons. And the SAVEDATA LIFECYCLE closes end to end: the
+      hddpersist leg reloads the hdd leg's EXPORTED image as the
+      machine's disk and types the file the first run wrote - the
+      differential run on a fresh formatted disk proves the read only
+      succeeds because the modification persisted through
+      export -> reload. Gate is TEN legs, ~81s.
+      Remaining: CHD + CD audio with real content, the user's movies.

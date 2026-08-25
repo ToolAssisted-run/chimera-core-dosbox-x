@@ -123,7 +123,8 @@ int main(int argc, char **argv)
 	const char *rom = nullptr;
 	const char *extraConfFile = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, staged beside the rom
-	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedule
+	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
+	std::vector<std::pair<long, int>> swapFd;
 	const char *workdir = "work-native";
 	const char *dumpPrefix = nullptr;
 	const char *typeText = nullptr;
@@ -147,6 +148,11 @@ int main(int argc, char **argv)
 			long fr = 0; int idx = 0;
 			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-cd wants FRAME:INDEX\n"); return 2; }
 			swapCd.push_back({ fr, idx });
+		}
+		else if (!strcmp(argv[i], "--swap-fd") && i + 1 < argc) {
+			long fr = 0; int idx = 0;
+			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-fd wants FRAME:INDEX\n"); return 2; }
+			swapFd.push_back({ fr, idx });
 		}
 		else if (!strcmp(argv[i], "--autoexec") && i + 1 < argc) autoexec.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
@@ -204,14 +210,12 @@ int main(int argc, char **argv)
 		if (!readWholeFile(spec.substr(eq + 1).c_str(), bytes)) { fprintf(stderr, "cannot read %s\n", spec.c_str()); return 1; }
 		if (!writeWholeFile(std::string(workdir) + "/" + spec.substr(0, eq), bytes.data(), bytes.size())) return 1;
 	}
-	if (m.romExt == ".iso" || m.romExt == ".cue") {
-		// extra discs staged as rom2..romN, same probe the guest runs
-		for (int i = 2; i <= 8; i++) {
-			struct stat st;
-			std::string name = std::string(workdir) + "/rom" + std::to_string(i);
-			if (stat(name.c_str(), &st) != 0) break;
-			m.extraDiscCount++;
-		}
+	// extra swappable images staged as rom2..romN, same probe the guest runs
+	for (int i = 2; i <= 8; i++) {
+		struct stat st;
+		std::string name = std::string(workdir) + "/rom" + std::to_string(i);
+		if (stat(name.c_str(), &st) != 0) break;
+		m.extraImageCount++;
 	}
 	if (!m.hddMounted && strcmp(formattedHdd, "none") != 0) {
 		const uint8_t *zst = nullptr;
@@ -268,6 +272,9 @@ int main(int argc, char **argv)
 		}
 		for (const auto &sc : swapCd) {
 			if (sc.first == i) in.insertCDROM = sc.second;
+		}
+		for (const auto &sf : swapFd) {
+			if (sf.first == i) in.insertFloppyDisk = sf.second;
 		}
 		if (exercise) {
 			// the shared deterministic pattern; levels become the driver's

@@ -104,18 +104,18 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	conf += "\n[autoexec]\n@echo off\n";
 	// what the loaded file IS: the frontend mounts it under the fixed name
 	// "rom" and the extension (rom.name) says how the machine takes it
+	// extra images (the rom2..romN convention) join the mount as a swap
+	// list; the disk-swap input controls cycle through them
+	std::string extras;
+	for (int32_t i = 0; i < m.extraImageCount; i++) {
+		extras += " rom" + std::to_string(i + 2);
+	}
 	static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
 	for (const char *e : floppyExts) {
-		if (m.romExt == e) { conf += std::string("imgmount a rom -t floppy\n"); break; }
+		if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; break; }
 	}
 	if (m.romExt == ".iso" || m.romExt == ".cue") {
-		// extra discs (the rom2..romN convention) join the same mount as a
-		// swap list; the disk-swap input controls cycle through them
-		conf += "imgmount d rom";
-		for (int32_t i = 0; i < m.extraDiscCount; i++) {
-			conf += " rom" + std::to_string(i + 2);
-		}
-		conf += " -t iso\n";
+		conf += "imgmount d rom" + extras + " -t iso\n";
 	}
 	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
 
