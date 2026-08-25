@@ -25,6 +25,7 @@
 #include <sys/time.h>
 
 #include "dosbox-driver.h"
+#include "exercise-input.h"
 #include <keyboard.h>
 
 // The guest's clock is frozen by miniBox (a constant 2017-05-27 12:44:28 UTC,
@@ -121,6 +122,7 @@ int main(int argc, char **argv)
 	std::vector<std::string> autoexec;
 	const char *rom = nullptr;
 	const char *extraConfFile = nullptr;
+	std::vector<std::string> extraFiles; // NAME=PATH, staged beside the rom
 	const char *workdir = "work-native";
 	const char *dumpPrefix = nullptr;
 	const char *typeText = nullptr;
@@ -128,7 +130,7 @@ int main(int argc, char **argv)
 	const char *sliceOut = nullptr;
 	unsigned long sliceOff = 0, sliceLen = 0;
 	int frames = 600;
-	bool gate = false, verbose = false;
+	bool gate = false, verbose = false, exercise = false;
 	const char *formattedHdd = "none";
 	DosDrvMachine m;
 
@@ -139,6 +141,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) m.cpuCycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
 		else if (!strcmp(argv[i], "--extra-conf") && i + 1 < argc) extraConfFile = argv[++i];
+		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--autoexec") && i + 1 < argc) autoexec.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--workdir") && i + 1 < argc) workdir = argv[++i];
@@ -151,6 +154,7 @@ int main(int argc, char **argv)
 			sliceOut = argv[++i];
 		}
 		else if (!strcmp(argv[i], "--gate")) gate = true;
+		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
 		else if (!strcmp(argv[i], "--joysticks")) m.joysticks = true;
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
@@ -186,6 +190,14 @@ int main(int argc, char **argv)
 			m.romExt = romExt;
 		}
 	}
+	for (const std::string &spec : extraFiles) {
+		// a cue sheet's referenced track file, or any other named sibling
+		auto eq = spec.find('=');
+		if (eq == std::string::npos) { fprintf(stderr, "--extra-file wants NAME=PATH\n"); return 2; }
+		std::vector<uint8_t> bytes;
+		if (!readWholeFile(spec.substr(eq + 1).c_str(), bytes)) { fprintf(stderr, "cannot read %s\n", spec.c_str()); return 1; }
+		if (!writeWholeFile(std::string(workdir) + "/" + spec.substr(0, eq), bytes.data(), bytes.size())) return 1;
+	}
 	if (!m.hddMounted && strcmp(formattedHdd, "none") != 0) {
 		const uint8_t *zst = nullptr;
 		size_t zstLen = 0;
@@ -219,6 +231,7 @@ int main(int argc, char **argv)
 	uint64_t gateV = 0, gateA = 0;
 	size_t typePos = 0;
 	int typePhase = 0; // interleave press / release frames
+	ExLevels prevEx = exercise_levels(0);
 	for (int i = 0; i < frames; i++) {
 		DosDrvInput in;
 		// the frame slice follows the machine's reported refresh, exactly as
@@ -237,6 +250,26 @@ int main(int argc, char **argv)
 				if (shift) in.keys[KBD_leftshift] = 1;
 			}
 			if (++typePhase == 4) { typePhase = 0; typePos++; }
+		}
+		if (exercise) {
+			// the shared deterministic pattern; levels become the driver's
+			// edges here, exactly as the guest adapter converts them
+			ExLevels ex = exercise_levels(i);
+			in.mouse.posX = ex.posX;
+			in.mouse.posY = ex.posY;
+			in.mouse.speedX = ex.spdX;
+			in.mouse.speedY = ex.spdY;
+			in.mouse.leftPressed = ex.mouseL && !prevEx.mouseL;
+			in.mouse.leftReleased = !ex.mouseL && prevEx.mouseL;
+			in.mouse.rightPressed = ex.mouseR && !prevEx.mouseR;
+			in.mouse.rightReleased = !ex.mouseR && prevEx.mouseR;
+			in.joy1.up = ex.joyUp != 0;
+			in.joy1.down = ex.joyDown != 0;
+			in.joy1.left = ex.joyLeft != 0;
+			in.joy1.right = ex.joyRight != 0;
+			in.joy1.button1 = ex.joyB1 != 0;
+			in.joy1.button2 = ex.joyB2 != 0;
+			prevEx = ex;
 		}
 		dosdrv_frame(in);
 

@@ -111,7 +111,7 @@ fi
 # DIFFERENTIAL: typing the file that exists must render its content, so the
 # digests must DIFFER from typing a file that does not - a broken mount fails
 # both ways identically and cannot pass. Then native==sandbox==rerecord.
-python3 "$here/tests/gen-testiso.py" "$work/test.iso" HELLO.TXT "GREETINGS FROM THE CHIMERA CD GATE" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/test.iso" "HELLO.TXT=@GREETINGS FROM THE CHIMERA CD GATE" >/dev/null
 cdframes=800
 hit='type D:\HELLO.TXT
 '
@@ -134,5 +134,74 @@ elif [ "$box" != "$rr" ]; then
 else
 	echo "PASS cd ($cdframes frames, iso mounted and read through plain file mounts, native==sandbox==rerecord)"
 fi
+
+# ---- the cue leg -----------------------------------------------------------
+# The same disc as a cue/bin pair: the cue sheet is the loaded file, its one
+# MODE1/2048 track file arrives as a second mounted input - the shape a real
+# game's cue+bin will take through the multi-file descriptor. Same
+# differential proof as the cd leg.
+cp "$work/test.iso" "$work/TRACK01.BIN"
+printf 'FILE "TRACK01.BIN" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n' > "$work/test.cue"
+nat="$(timeout 900 "$rn" --workdir "$work/cue" --rom "$work/test.cue" --extra-file "TRACK01.BIN=$work/TRACK01.BIN" \
+	--frames "$cdframes" --gate --type "$hit" 2>/dev/null | digests)"
+natmiss="$(timeout 900 "$rn" --workdir "$work/cuemiss" --rom "$work/test.cue" --extra-file "TRACK01.BIN=$work/TRACK01.BIN" \
+	--frames "$cdframes" --gate --type "$miss" 2>/dev/null | digests)"
+box="$(timeout 1200 "$rw" "$core" --rom "$work/test.cue" --extra-file "TRACK01.BIN=$work/TRACK01.BIN" \
+	--frames "$cdframes" --type "$hit" 2>/dev/null | digests)"
+rr="$(timeout 3600 "$rw" "$core" --rom "$work/test.cue" --extra-file "TRACK01.BIN=$work/TRACK01.BIN" \
+	--frames "$cdframes" --type "$hit" --rerecord 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL cue (a run produced no digests)"; fail=1
+elif [ "$nat" = "$natmiss" ]; then
+	echo "FAIL cue (the track file did not reach the screen - did the cue parse?)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL cue (native vs sandbox)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$box" != "$rr" ]; then
+	echo "FAIL cue (rerecord diverges)"
+	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+else
+	echo "PASS cue ($cdframes frames, cue/bin pair through plain mounts, native==sandbox==rerecord)"
+fi
+
+# ---- the input leg ---------------------------------------------------------
+# Mouse and joystick, witnessed by tiny hand-assembled DOS programs delivered
+# on the test CD (gen-testcom.py): JOYTEST renders the game port's button
+# byte into video memory, MOUSETEST polls INT 33h and renders position and
+# buttons. The shared deterministic pattern (exercise-input.h) drives the
+# native input struct on one side and the guest's SetAxis/SetButton exports -
+# the frontend's exact path - on the other. Differential (exercised vs quiet
+# must differ) plus native==sandbox==rerecord.
+python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" >/dev/null
+inputframes=500
+inputleg() {
+	name="$1"; cmd="$2"; joyflag="$3"
+	nat="$(timeout 900 "$rn" --workdir "$work/in-$name" --rom "$work/input.iso" $joyflag \
+		--frames "$inputframes" --gate --exercise --type "$cmd" 2>/dev/null | digests)"
+	quiet="$(timeout 900 "$rn" --workdir "$work/in-$name-q" --rom "$work/input.iso" $joyflag \
+		--frames "$inputframes" --gate --type "$cmd" 2>/dev/null | digests)"
+	box="$(timeout 1200 "$rw" "$core" --rom "$work/input.iso" $joyflag \
+		--frames "$inputframes" --exercise --type "$cmd" 2>/dev/null | digests)"
+	rr="$(timeout 3600 "$rw" "$core" --rom "$work/input.iso" $joyflag \
+		--frames "$inputframes" --exercise --type "$cmd" --rerecord 2>/dev/null | digests)"
+	if [ -z "$nat" ] || [ -z "$box" ]; then
+		echo "FAIL input:$name (a run produced no digests)"; fail=1
+	elif [ "$nat" = "$quiet" ]; then
+		echo "FAIL input:$name (the exercised inputs did not reach the machine)"; fail=1
+	elif [ "$nat" != "$box" ]; then
+		echo "FAIL input:$name (native vs sandbox)"
+		echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+	elif [ "$box" != "$rr" ]; then
+		echo "FAIL input:$name (rerecord diverges)"
+		echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+	else
+		echo "PASS input:$name ($inputframes frames, inputs shape the screen, native==sandbox==rerecord)"
+	fi
+}
+inputleg joystick 'd:\joytest.com
+' --joysticks
+inputleg mouse 'd:\mousetest.com
+' ""
 
 exit $fail

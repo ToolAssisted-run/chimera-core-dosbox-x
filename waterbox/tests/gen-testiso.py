@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
-"""Generates a minimal ISO9660 image holding one file at the root - free,
-machine-generated CD content for the gate (no iso tool needed, and the bytes
-are a pure function of the inputs).
+"""Generates a minimal ISO9660 image - free, machine-generated CD content for
+the gate (no iso tool needed, and the bytes are a pure function of the
+inputs).
 
-usage: gen-testiso.py <out.iso> <filename> <content-string>
+usage: gen-testiso.py <out.iso> NAME=@inline-text [NAME=path]...
+Each argument adds one root-level file: '@' prefixed values are literal text,
+anything else is read as a (binary) file path.
 """
 import struct
 import sys
 
 SECTOR = 2048
-out, name, content = sys.argv[1], sys.argv[2], sys.argv[3].encode()
+out = sys.argv[1]
+files = []  # (NAME, bytes)
+for arg in sys.argv[2:]:
+    name, _, val = arg.partition('=')
+    data = val[1:].encode() if val.startswith('@') else open(val, 'rb').read()
+    files.append((name.upper(), data))
 
 def both16(v):
     return struct.pack('<H', v) + struct.pack('>H', v)
@@ -35,13 +42,22 @@ def dirrec(extent, size, flags, ident):
 
 LBA_PATH = 18
 LBA_ROOT = 19
-LBA_FILE = 20
-TOTAL = 21
+LBA_FIRST_FILE = 20
 
-root_self = dirrec(LBA_ROOT, SECTOR, 2, b'\x00')
-root_parent = dirrec(LBA_ROOT, SECTOR, 2, b'\x01')
-file_rec = dirrec(LBA_FILE, len(content), 0, name.upper().encode() + b';1')
-rootsec = (root_self + root_parent + file_rec).ljust(SECTOR, b'\x00')
+# lay the files out on consecutive sector runs after the root directory
+extents = []
+lba = LBA_FIRST_FILE
+for name, data in files:
+    sectors = max(1, (len(data) + SECTOR - 1) // SECTOR)
+    extents.append(lba)
+    lba += sectors
+TOTAL = lba
+
+rootsec = dirrec(LBA_ROOT, SECTOR, 2, b'\x00') + dirrec(LBA_ROOT, SECTOR, 2, b'\x01')
+for (name, data), ext in zip(files, extents):
+    rootsec += dirrec(ext, len(data), 0, name.encode() + b';1')
+assert len(rootsec) <= SECTOR, 'too many files for the one-sector root'
+rootsec = rootsec.ljust(SECTOR, b'\x00')
 
 pathrec = bytes([1, 0]) + struct.pack('<I', LBA_ROOT) + struct.pack('<H', 1) + b'\x00\x00'
 pathsec = pathrec.ljust(SECTOR, b'\x00')
@@ -58,7 +74,8 @@ pvd[124:128] = both16(1)
 pvd[128:132] = both16(SECTOR)
 pvd[132:140] = both32(len(pathrec))
 pvd[140:144] = struct.pack('<I', LBA_PATH)
-pvd[156:156 + len(root_self)] = dirrec(LBA_ROOT, SECTOR, 2, b'\x00')
+root_rec = dirrec(LBA_ROOT, SECTOR, 2, b'\x00')
+pvd[156:156 + len(root_rec)] = root_rec
 
 term = bytearray(SECTOR)
 term[0] = 255
@@ -70,7 +87,9 @@ image += pvd
 image += term
 image += pathsec
 image += rootsec
-image += content.ljust(SECTOR, b'\x00')
+for name, data in files:
+    sectors = max(1, (len(data) + SECTOR - 1) // SECTOR)
+    image += data.ljust(sectors * SECTOR, b'\x00')
 assert len(image) == TOTAL * SECTOR
 open(out, 'wb').write(image)
-print(f'{out}: {TOTAL} sectors, /{name.upper()};1 = {len(content)} bytes')
+print(f'{out}: {TOTAL} sectors, ' + ', '.join(f'/{n};1 = {len(d)} bytes' for n, d in files))

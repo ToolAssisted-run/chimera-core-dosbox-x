@@ -105,7 +105,15 @@ ECL_EXPORT int Init(void)
 					if (head[i] != '\t' && head[i] != '\n' && head[i] != '\r'
 						&& (head[i] < 0x20 || head[i] > 0x7E)) { text = false; break; }
 				}
-				if (text) romExt = ".conf";
+				if (text) {
+					// a cue sheet is text too; its FILE/TRACK lines say so
+					char headStr[129];
+					size_t hn = n < 128 ? n : 128;
+					memcpy(headStr, head, hn);
+					headStr[hn] = '\0';
+					bool cue = strstr(headStr, "FILE ") != nullptr && strstr(headStr, "TRACK ") != nullptr;
+					romExt = cue ? ".cue" : ".conf";
+				}
 				else if (pn == 5 && memcmp(pvd, "CD001", 5) == 0) romExt = ".iso";
 				else if (size <= 2949120) romExt = ".img"; // up to a 2.88MB floppy
 				else romExt = ".hdd";

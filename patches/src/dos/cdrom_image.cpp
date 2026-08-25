@@ -1338,8 +1338,11 @@ bool CDROM_Interface_Image::LoadCueSheet(const char *cuefile)
     // Known extensions at the moment are: .cue, .ins, .dat, .inst (not sure it is an exhaustive list)
 	{
 		const char *s = strrchr(cuefile,'.');
-		if (!s) return false;
-		if (!strcasecmp(s,".ccd") || !strcasecmp(s, ".chd") || !strcasecmp(s, ".iso") || !strcasecmp(s, ".img") || !strcasecmp(s, ".gog")
+		/* wbx: the sandbox mounts the loaded file under the fixed name "rom"
+		 * (no extension); let it through to the content parse below, which
+		 * rejects binaries anyway ("probably a binary file"). */
+		if (!s) { if (strcmp(cuefile, "rom") != 0) return false; }
+		else if (!strcasecmp(s,".ccd") || !strcasecmp(s, ".chd") || !strcasecmp(s, ".iso") || !strcasecmp(s, ".img") || !strcasecmp(s, ".gog")
             || !strcasecmp(s, ".mds") || !strcasecmp(s, ".mdf") || !strcasecmp(s, ".bin")) return false;
 	}
 

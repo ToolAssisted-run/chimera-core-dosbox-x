@@ -20,6 +20,7 @@
 
 #include <sys/stat.h>
 
+#include "exercise-input.h"
 #include <keyboard.h> // KBD_* values; no other dosbox headers needed
 
 static uint64_t fnv(uint64_t h, const void *p, size_t n)
@@ -137,20 +138,23 @@ int main(int argc, char **argv)
 	const char *wbxPath = nullptr, *rom = nullptr;
 	const char *typeText = nullptr, *savedataOut = nullptr;
 	const char *preset = nullptr, *formattedHdd = nullptr;
+	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
-	bool rerecord = false, joysticks = false;
+	bool rerecord = false, joysticks = false, exercise = false;
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
 		else if (!strcmp(argv[i], "--preset") && i + 1 < argc) preset = argv[++i];
 		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
+		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) memsize = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) cycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = strtol(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--type") && i + 1 < argc) typeText = argv[++i];
 		else if (!strcmp(argv[i], "--savedata-out") && i + 1 < argc) savedataOut = argv[++i];
 		else if (!strcmp(argv[i], "--rerecord")) rerecord = true;
+		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
 		else if (!wbxPath) wbxPath = argv[i];
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
@@ -186,6 +190,18 @@ int main(int argc, char **argv)
 		if (r.error_message[0]) { fprintf(stderr, "mount rom.name: %s\n", r.error_message); return 1; }
 	}
 
+	for (const std::string &spec : extraFiles) {
+		auto eq = spec.find('=');
+		if (eq == std::string::npos) { fprintf(stderr, "--extra-file wants NAME=PATH\n"); return 2; }
+		std::string name = spec.substr(0, eq), path = spec.substr(eq + 1);
+		FILE *f = fopen(path.c_str(), "rb");
+		if (!f) { fprintf(stderr, "cannot open %s\n", path.c_str()); return 1; }
+		freader rd = { f };
+		wbx_mount_file(h, name.c_str(), file_read, (uintptr_t)&rd, false, &r);
+		fclose(f);
+		if (r.error_message[0]) { fprintf(stderr, "mount %s: %s\n", name.c_str(), r.error_message); return 1; }
+	}
+
 	// the settings channel, exactly the frontend's shape (a flat JSON object)
 	std::string settings = "{";
 	auto addStr = [&](const char *k, const char *v) {
@@ -218,6 +234,7 @@ int main(int argc, char **argv)
 
 	framefn FrameAdvance = (framefn)proc(h, "FrameAdvance");
 	setfn SetButton = (setfn)proc(h, "SetButton");
+	setfn SetAxis = (setfn)proc(h, "SetAxis");
 	ptrfn GetVideoBgra = (ptrfn)proc(h, "GetVideoBgra");
 	intfn GetVideoWidth = (intfn)proc(h, "GetVideoWidth");
 	intfn GetVideoHeight = (intfn)proc(h, "GetVideoHeight");
@@ -270,6 +287,24 @@ int main(int argc, char **argv)
 			prevShift = shift;
 		}
 
+		if (exercise) {
+			// the shared pattern, driven exactly as the frontend drives the
+			// guest: axes through SetAxis, button LEVELS through SetButton
+			// (the adapter converts mouse levels to edges itself)
+			ExLevels ex = exercise_levels(i);
+			SetAxis(0, ex.posX);
+			SetAxis(1, ex.posY);
+			SetAxis(2, ex.spdX);
+			SetAxis(3, ex.spdY);
+			SetButton(EX_BTN_MOUSE + 0, ex.mouseL);
+			SetButton(EX_BTN_MOUSE + 2, ex.mouseR);
+			SetButton(EX_BTN_JOY1 + 0, ex.joyUp);
+			SetButton(EX_BTN_JOY1 + 1, ex.joyDown);
+			SetButton(EX_BTN_JOY1 + 2, ex.joyLeft);
+			SetButton(EX_BTN_JOY1 + 3, ex.joyRight);
+			SetButton(EX_BTN_JOY1 + 4, ex.joyB1);
+			SetButton(EX_BTN_JOY1 + 5, ex.joyB2);
+		}
 		FrameAdvance(0);
 
 		int w = GetVideoWidth(), hgt = GetVideoHeight();

@@ -396,5 +396,18 @@ build/meson-native` produces run-native. Patches overlay at every
       it now asserts the typed write actually changes the disk; and the
       conf presets said machine=vga, which this DOSBox-X rejects (classic
       dosbox vga meant s3) - now machine=svga_s3 explicitly.
-      Remaining: cue/bin + CHD with real content, CD audio, floppy
-      swapping exercise, the user's movies.
+      Cue/bin DONE the same day: the cue sheet loads as the rom, its
+      track file as a second mounted input (--extra-file in both
+      runners - the shape the multi-file descriptor will take), one
+      small patch letting the extensionless "rom" mount reach the cue
+      content parse. Mouse and joystick DONE the same day: witnessed by
+      hand-assembled DOS programs delivered on the test CD
+      (tests/gen-testcom.py - JOYTEST renders the game port's button
+      byte to video memory, MOUSETEST polls INT 33h), driven by one
+      shared deterministic pattern (exercise-input.h) through the
+      native input struct on one side and the guest's SetAxis/SetButton
+      exports on the other, differential + native==sandbox==rerecord.
+      Gate is now SEVEN legs (boot, hdd, preset, cd, cue,
+      input:joystick, input:mouse), ~56s wall.
+      Remaining: CHD + CD audio with real content, floppy swapping
+      (needs multiple floppies = the descriptor), the user's movies.
