@@ -741,7 +741,7 @@ void MenuBrowseImageFile(char drive, bool arc, bool boot, bool multiple, const s
 			paths.push_back(lTheOpenFileName);
 		}
 	} else {
-		const char *lFilterPatterns[] = {"*.ima","*.img","*.vhd","*.fdi","*.hdi","*.nfd","*.nhd","*.d88","*.hdm","*.xdf","*.cdrom", "*.iso","*.cue","*.bin","*.chd","*.mdf","*.gog","*.ins","*.ccd","*.inst","*.IMA","*.IMG","*.VHD","*.FDI","*.HDI","*.NFD","*.NHD","*.D88","*.HDM","*.XDF",".CDROM", "*.ISO","*.CUE","*.BIN","*.CHD","*.MDF","*.GOG","*.INS","*.CCD","*.INST"};
+		const char *lFilterPatterns[] = {"*.ima","*.img","*.vhd","*.fdi","*.hdi","*.nfd","*.nhd","*.d88","*.hdm","*.xdf","*.iso","*.cue","*.bin","*.chd","*.mdf","*.gog","*.ins","*.ccd","*.inst","*.IMA","*.IMG","*.VHD","*.FDI","*.HDI","*.NFD","*.NHD","*.D88","*.HDM","*.XDF","*.ISO","*.CUE","*.BIN","*.CHD","*.MDF","*.GOG","*.INS","*.CCD","*.INST"};
 		const char *lFilterDescription = "Disk/CD image files";
 		lTheOpenFileName = tinyfd_openFileDialog(((multiple?"Select image file(s) for Drive ":"Select an image file for Drive ")+str+":").c_str(),"", sizeof(lFilterPatterns) / sizeof(lFilterPatterns[0]),lFilterPatterns,lFilterDescription,multiple?1:0);
 		if (lTheOpenFileName) {
@@ -6405,7 +6405,7 @@ class IMGMOUNT : public Program {
 							temp_line = paths[0];
 							continue;
 						} else if ((!DOS_MakeName(tmp, fullname, &dummy) || strncmp(Drives[dummy]->GetInfo(), "local directory", 15)) && !qmount) {
-                             if (_memFileDirectory.contains(tmp) || std::string(tmp).find(".cdrom") != std::string::npos) { paths.push_back(tmp); continue; }
+                             if (_memFileDirectory.contains(tmp)) { paths.push_back(tmp); continue; }
                              else WriteOut(MSG_Get(usedef?"PROGRAM_IMGMOUNT_DEFAULT_NOT_FOUND":"PROGRAM_IMGMOUNT_NON_LOCAL_DRIVE"));
                              return true;
                          }

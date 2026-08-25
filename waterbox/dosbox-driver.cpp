@@ -28,7 +28,6 @@
 #include <mouse.h>
 #include <vga.h>
 #include <mem.h>
-#include <src/dos/cdrom.h>
 
 #define DOS_DRIVE_A 0
 #define DOS_DRIVE_D 3
@@ -75,14 +74,6 @@ extern bool user_cursor_locked;
 
 // ---- drive activity (fat/iso drives set this; the drive light reads it) ---
 bool _driveUsed = false;
-
-// ---- CD callback remnant --------------------------------------------------
-// The BizHawk-era host-callback CD path (BizhawkFile in cdrom_image.cpp)
-// still links against these. Chimera mounts CD images as plain files instead;
-// this stays as a stub until that patch is retired (docs/PLAN.md, M6).
-void (*cd_read_callback)(const char *cdRomName, int32_t lba, void *dest, int sectorSize) = nullptr;
-CDData_t _cdData[MAX_CD_COUNT];
-size_t _cdCount = 0;
 
 // ---- configuration composition ---------------------------------------------
 

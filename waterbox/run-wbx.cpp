@@ -75,6 +75,8 @@ static KBD_KEYS keyForChar(char c, bool *shift)
 		case '9': return KBD_9;
 		case ' ': return KBD_space;
 		case '.': return KBD_period;
+		case '-': return KBD_minus;
+		case '=': return KBD_equals;
 		case '>': *shift = true; return KBD_period;
 		case ':': *shift = true; return KBD_semicolon;
 		case '\\': return KBD_backslash;

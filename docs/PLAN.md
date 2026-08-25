@@ -375,5 +375,26 @@ build/meson-native` produces run-native. Patches overlay at every
       RAM slice identical to native through the real frontend, preset
       setting arrives, 121+4 keybinds adopted, savedata engine export
       == sandbox runner. deterministic package -> build/Cores/dosbox-x.zip.
-- [ ] M6: CD direct-mount proof (free cue/bin), floppy swapping, drive
-      light; then real content with the user's movies.
+- [~] M6: CD direct-mount DONE (2026-08-25). The BizHawk-era CD layer is
+      gone: cdrom_image.cpp rebuilt from pristine upstream (keeping only
+      the drive-light hooks and swapping its unity-includes for the
+      separate objects both builds compile), cdrom.h reverted, the
+      cd_read_callback/_cdData driver stubs deleted, the ".cdrom"
+      pseudo-file remnants swept. CD images are plain hash-bound mounts
+      read by upstream's own BinaryFile/CueFile/CHDFile; the guest
+      sniffer recognises ISO9660 (CD001 at 0x8001) for nameless roms.
+      The gate's cd leg boots a HAND-ROLLED minimal ISO
+      (tests/gen-testiso.py - no iso tool on the machine, and the bytes
+      are a pure function of the inputs), mounts it via autoexec, types
+      the file it holds, and proves it DIFFERENTIALLY: the hit must
+      digest differently from a miss, so a silently broken mount cannot
+      pass. Two real bugs found on the way: sdlmain's global-config
+      scavenging ran ClearExtraData() when no real dosbox-x.conf file
+      exists, wiping the memory-composed conf's autoexec lines (patched:
+      the in-memory conf counts as an existing config) - the hdd leg had
+      been passing HOLLOWLY with both builds identically inputless, and
+      it now asserts the typed write actually changes the disk; and the
+      conf presets said machine=vga, which this DOSBox-X rejects (classic
+      dosbox vga meant s3) - now machine=svga_s3 explicitly.
+      Remaining: cue/bin + CHD with real content, CD audio, floppy
+      swapping exercise, the user's movies.

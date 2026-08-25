@@ -65,10 +65,16 @@ box="$(timeout 1200 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 rr="$(timeout 3600 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 	--type "$typed" --rerecord 2>/dev/null | digests)"
 hddnat="$(printf '%s\n' "$nat" | grep 'Hard Disk Drive')"
+untyped="$(timeout 900 "$rn" --workdir "$work/hdd0" --formatted-hdd 21mb --frames "$hddframes" --gate 2>/dev/null \
+	| grep 'Hard Disk Drive')"
 if [ -z "$nat" ] || [ -z "$box" ]; then
 	echo "FAIL hdd (a run produced no digests)"; fail=1
 elif [ -z "$hddnat" ]; then
 	echo "FAIL hdd (no Hard Disk Drive domain in the native run)"; fail=1
+elif [ "$hddnat" = "$untyped" ]; then
+	# the lesson of the hollow pass: equal machines prove nothing if the
+	# machine silently ignored the input
+	echo "FAIL hdd (the typed DOS write did not change the disk)"; fail=1
 elif [ "$nat" != "$box" ]; then
 	echo "FAIL hdd (native vs sandbox)"
 	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
@@ -97,6 +103,36 @@ elif [ "$nat" = "$base" ]; then
 	echo "FAIL preset (the machine preset did not change the machine)"; fail=1
 else
 	echo "PASS preset (1983_ibm_xt5160: a different machine, and both builds agree on it)"
+fi
+
+# ---- the cd leg ------------------------------------------------------------
+# A machine-generated ISO9660 image (gen-testiso.py, free content) mounted as
+# D: through the autoexec, its one file typed at the prompt. The proof is
+# DIFFERENTIAL: typing the file that exists must render its content, so the
+# digests must DIFFER from typing a file that does not - a broken mount fails
+# both ways identically and cannot pass. Then native==sandbox==rerecord.
+python3 "$here/tests/gen-testiso.py" "$work/test.iso" HELLO.TXT "GREETINGS FROM THE CHIMERA CD GATE" >/dev/null
+cdframes=800
+hit='type D:\HELLO.TXT
+'
+miss='type D:\MISSING.TXT
+'
+nat="$(timeout 900 "$rn" --workdir "$work/cd" --rom "$work/test.iso" --frames "$cdframes" --gate --type "$hit" 2>/dev/null | digests)"
+natmiss="$(timeout 900 "$rn" --workdir "$work/cdmiss" --rom "$work/test.iso" --frames "$cdframes" --gate --type "$miss" 2>/dev/null | digests)"
+box="$(timeout 1200 "$rw" "$core" --rom "$work/test.iso" --frames "$cdframes" --type "$hit" 2>/dev/null | digests)"
+rr="$(timeout 3600 "$rw" "$core" --rom "$work/test.iso" --frames "$cdframes" --type "$hit" --rerecord 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL cd (a run produced no digests)"; fail=1
+elif [ "$nat" = "$natmiss" ]; then
+	echo "FAIL cd (the CD's file did not reach the screen - is D: mounted?)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL cd (native vs sandbox)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$box" != "$rr" ]; then
+	echo "FAIL cd (rerecord diverges)"
+	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+else
+	echo "PASS cd ($cdframes frames, iso mounted and read through plain file mounts, native==sandbox==rerecord)"
 fi
 
 exit $fail

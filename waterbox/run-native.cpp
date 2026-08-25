@@ -102,6 +102,8 @@ static KBD_KEYS keyForChar(char c, bool *shift)
 		case '9': return KBD_9;
 		case ' ': return KBD_space;
 		case '.': return KBD_period;
+		case '-': return KBD_minus;
+		case '=': return KBD_equals;
 		case '>': *shift = true; return KBD_period;
 		case ':': *shift = true; return KBD_semicolon;
 		case '\\': return KBD_backslash;
@@ -203,6 +205,7 @@ int main(int argc, char **argv)
 		m.extraConf += "\n[autoexec]\n" + line + "\n";
 	}
 	cfg.confText = dosdrv_compose_conf(m);
+	if (getenv("DOSDRV_PRINT_CONF")) fputs(cfg.confText.c_str(), stderr);
 	if (chdir(workdir) != 0) { fprintf(stderr, "cannot enter %s\n", workdir); return 1; }
 
 	// ---- boot -------------------------------------------------------------

@@ -8630,6 +8630,8 @@ void jsc_run(const char *jskey) {
 void DISP2_Init(uint8_t color), DISP2_Shut();
 //extern void UI_Init(void);
 void grGlideShutdown(void);
+extern "C" const char *chimera_composed_conf(); /* wbx */
+
 int _main(int argc, char* argv[]) SDL_MAIN_NOEXCEPT {
 #if (defined __i386__ || defined __x86_64__) && (!defined IS_OLDMACOS && (defined BSD || defined LINUX))
     dropPrivilegesTemp();
@@ -8828,7 +8830,12 @@ int _main(int argc, char* argv[]) SDL_MAIN_NOEXCEPT {
 
     control->ParseConfigFile("dosbox-x.conf");
 
-    if (!control->opt_defaultconf && control->config_file_list.empty() && stat("dosbox-x.conf", &st) && stat("dosbox.conf", &st)) {
+    /* wbx: the chimera driver's in-memory conf counts as an existing
+     * dosbox-x.conf - without this the global-config scavenging below runs
+     * and its ClearExtraData() wipes the autoexec lines the memory conf
+     * carried */
+    if (!control->opt_defaultconf && control->config_file_list.empty() && stat("dosbox-x.conf", &st) && stat("dosbox.conf", &st)
+        && chimera_composed_conf() == NULL) {
         /* load the global config file first */
         std::string tmp,config_path,config_combined;
 

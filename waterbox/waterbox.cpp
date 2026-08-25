@@ -92,6 +92,9 @@ ECL_EXPORT int Init(void)
 		} else if (FILE *f2 = fopen("rom", "rb")) {
 			uint8_t head[512];
 			size_t n = fread(head, 1, sizeof head, f2);
+			uint8_t pvd[6] = { 0 };
+			fseek(f2, 0x8001, SEEK_SET);
+			size_t pn = fread(pvd, 1, 5, f2);
 			fseek(f2, 0, SEEK_END);
 			long size = ftell(f2);
 			fclose(f2);
@@ -103,6 +106,7 @@ ECL_EXPORT int Init(void)
 						&& (head[i] < 0x20 || head[i] > 0x7E)) { text = false; break; }
 				}
 				if (text) romExt = ".conf";
+				else if (pn == 5 && memcmp(pvd, "CD001", 5) == 0) romExt = ".iso";
 				else if (size <= 2949120) romExt = ".img"; // up to a 2.88MB floppy
 				else romExt = ".hdd";
 			}
