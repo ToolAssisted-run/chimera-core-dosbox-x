@@ -980,6 +980,8 @@ Section* Config::GetSectionFromProperty(char const * const prop) const{
 }
 
 
+extern "C" const char *chimera_composed_conf(); /* wbx: the driver's composed conf */
+
 bool Config::ParseConfigFile(char const * const configfilename) {
     LOG(LOG_MISC,LOG_DEBUG)("CONFIG: Attempting to load config file #%zu from %s",configfiles.size(),configfilename);
 
@@ -987,11 +989,24 @@ bool Config::ParseConfigFile(char const * const configfilename) {
     if (strlen(configfilename) >= PATH_MAX) {
         LOG_MSG("Warning: config file path %u characters is too long: %s", (unsigned int)strlen(configfilename), configfilename);
     }
-    ifstream in(configfilename);
-    if (!in) {
-        LOG(LOG_MISC,LOG_NORMAL)("CONFIG: Failed Loading %s as a config file", configfilename);
-        return false;
+    /* wbx: in the sandbox the chimera driver composes the primary conf in
+     * memory (from the frontend's settings channel); a real file, when a host
+     * staged one, still wins */
+    ifstream fileIn(configfilename);
+    std::istringstream memIn;
+    std::istream *inSrc = &fileIn;
+    if (!fileIn) {
+        const char *mem = chimera_composed_conf();
+        if (mem != NULL && strcmp(configfilename, "dosbox-x.conf") == 0) {
+            memIn.str(mem);
+            inSrc = &memIn;
+            LOG(LOG_MISC,LOG_NORMAL)("CONFIG: Loading %s from the chimera driver's composed text", configfilename);
+        } else {
+            LOG(LOG_MISC,LOG_NORMAL)("CONFIG: Failed Loading %s as a config file", configfilename);
+            return false;
+        }
     }
+    std::istream &in = *inSrc;
     const char * settings_type;
     settings_type = (configfiles.size() == 0)? "primary":"additional";
     configfiles.emplace_back(configfilename);

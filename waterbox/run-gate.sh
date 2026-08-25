@@ -1,10 +1,11 @@
 #!/bin/sh
-# The equivalence gate: the same machine, config and input schedule through
-# the native reference build and through the miniBox sandbox, requiring
-# identical video/audio/memory-domain digests; the sandbox again with the
-# whole machine round-tripped through save/load state around EVERY frame
-# (the suspended dosbox coroutine included); and the savedata export trees
-# byte-identical between the builds.
+# The equivalence gate: the same machine, configuration and input schedule
+# through the native reference build and through the miniBox sandbox - the
+# NATIVE side composed by the driver from machine knobs, the SANDBOX side
+# composed by the guest itself from the settings channel, so the gate also
+# proves the settings path end to end. Digests must match on video, audio and
+# every memory domain; the sandbox must survive save/load state around every
+# frame; savedata export trees must be byte-identical.
 #
 # Usage: ./run-gate.sh [-f frames]
 set -u
@@ -29,18 +30,14 @@ work="$here/tests/work"
 rm -rf "$work"
 mkdir -p "$work"
 
-conf_base="$here/conf/dosbox-x.base.conf"
-conf_mach="$here/conf/dosbox-x.1991.ibm_ps2_25_386.conf"
-
 fail=0
 digests() { grep -E '^(videoHash|audioHash|domain\[)'; }
 
 # ---- the boot leg ----------------------------------------------------------
-# Power-on to the DOS prompt, nothing pressed.
-nat="$(timeout 600 "$rn" --workdir "$work/boot" --conf "$conf_base" --conf "$conf_mach" \
-	--frames "$frames" --gate 2>/dev/null | digests)"
-box="$(timeout 900 "$rw" "$core" --conf "$work/boot/dosbox-x.conf" --frames "$frames" 2>/dev/null | digests)"
-rr="$(timeout 1800 "$rw" "$core" --conf "$work/boot/dosbox-x.conf" --frames "$frames" --rerecord 2>/dev/null | digests)"
+# Power-on to the DOS prompt, nothing pressed, settings at their defaults.
+nat="$(timeout 600 "$rn" --workdir "$work/boot" --frames "$frames" --gate 2>/dev/null | digests)"
+box="$(timeout 900 "$rw" "$core" --frames "$frames" 2>/dev/null | digests)"
+rr="$(timeout 1800 "$rw" "$core" --frames "$frames" --rerecord 2>/dev/null | digests)"
 if [ -z "$nat" ] || [ -z "$box" ]; then
 	echo "FAIL boot (a run produced no digests)"; fail=1
 elif [ "$nat" != "$box" ]; then
@@ -54,21 +51,18 @@ else
 fi
 
 # ---- the hdd leg -----------------------------------------------------------
-# A 21MB FAT16 image mounted as C:, a DOS command typed at the prompt writing
-# a file to it. The Hard Disk Drive domain digest and the savedata export
-# trees must agree everywhere - this is the machine-writes-its-disk proof.
+# The formattedHardDisk SETTING mounts a blank 21MB FAT16 disk as C: (from the
+# embedded head, decompressed and grown in guest memory); a DOS command typed
+# at the prompt writes a file to it. The Hard Disk Drive domain digest and the
+# savedata export trees must agree everywhere.
 hddframes=600
-zstd -q -d -f "$here/hdd/dosbox-x.hdd.fat16.21mb.img.zst" -o "$work/hdd21.img"
 typed='echo SAVEME > C:\SAVED.TXT
 '
-nat="$(timeout 900 "$rn" --workdir "$work/hdd" --conf "$conf_base" --conf "$conf_mach" \
-	--hdd "$work/hdd21.img" --hdd-grow 21411840 --frames "$hddframes" --gate \
+nat="$(timeout 900 "$rn" --workdir "$work/hdd" --formatted-hdd 21mb --frames "$hddframes" --gate \
 	--type "$typed" --savedata-out "$work/sd-nat" 2>/dev/null | digests)"
-box="$(timeout 1200 "$rw" "$core" --conf "$work/hdd/dosbox-x.conf" \
-	--hdd "$work/hdd21.img" --hdd-grow 21411840 --frames "$hddframes" \
+box="$(timeout 1200 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 	--type "$typed" --savedata-out "$work/sd-box" 2>/dev/null | digests)"
-rr="$(timeout 3600 "$rw" "$core" --conf "$work/hdd/dosbox-x.conf" \
-	--hdd "$work/hdd21.img" --hdd-grow 21411840 --frames "$hddframes" \
+rr="$(timeout 3600 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 	--type "$typed" --rerecord 2>/dev/null | digests)"
 hddnat="$(printf '%s\n' "$nat" | grep 'Hard Disk Drive')"
 if [ -z "$nat" ] || [ -z "$box" ]; then
@@ -85,7 +79,24 @@ elif ! diff -r "$work/sd-nat" "$work/sd-box" >/dev/null 2>&1; then
 	echo "FAIL hdd (savedata export trees differ)"
 	diff -r "$work/sd-nat" "$work/sd-box" 2>&1 | head -5; fail=1
 else
-	echo "PASS hdd ($hddframes frames, typed DOS write, native==sandbox==rerecord, savedata trees identical)"
+	echo "PASS hdd ($hddframes frames, settings-mounted disk, typed DOS write, native==sandbox==rerecord, savedata trees identical)"
+fi
+
+# ---- the machine-preset leg ------------------------------------------------
+# A different machine year must produce a DIFFERENT machine (the setting
+# reaches both builds), and the two builds must still agree on it.
+nat="$(timeout 600 "$rn" --workdir "$work/cga" --preset 1983_ibm_xt5160 --frames "$frames" --gate 2>/dev/null | digests)"
+box="$(timeout 900 "$rw" "$core" --preset 1983_ibm_xt5160 --frames "$frames" 2>/dev/null | digests)"
+base="$(timeout 600 "$rn" --workdir "$work/base2" --frames "$frames" --gate 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL preset (a run produced no digests)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL preset (native vs sandbox on 1983_ibm_xt5160)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$nat" = "$base" ]; then
+	echo "FAIL preset (the machine preset did not change the machine)"; fail=1
+else
+	echo "PASS preset (1983_ibm_xt5160: a different machine, and both builds agree on it)"
 fi
 
 exit $fail

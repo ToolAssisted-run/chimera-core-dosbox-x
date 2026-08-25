@@ -15,6 +15,9 @@
 
 #include <jaffarCommon/file.hpp>
 
+#include "dosbox_conf_assets.h" // generated: conf presets + formatted disk heads
+#include <zstd.h>
+
 // DOSBox-X internals (include paths per sources.mk)
 #include <config.h>
 #include <sdlmain.h>
@@ -81,9 +84,64 @@ void (*cd_read_callback)(const char *cdRomName, int32_t lba, void *dest, int sec
 CDData_t _cdData[MAX_CD_COUNT];
 size_t _cdCount = 0;
 
+// ---- configuration composition ---------------------------------------------
+
+static std::string _composedConf;
+
+// setup.cpp's ParseConfigFile reads this when it cannot open the file
+extern "C" const char *chimera_composed_conf()
+{
+	return _composedConf.empty() ? nullptr : _composedConf.c_str();
+}
+
+std::string dosdrv_compose_conf(const DosDrvMachine &m)
+{
+	std::string conf((const char *)dosdrv_conf_base, dosdrv_conf_base_len);
+	conf += "\n";
+	for (size_t i = 0; i < sizeof dosdrv_conf_presets / sizeof dosdrv_conf_presets[0]; i++) {
+		if (m.machinePreset == dosdrv_conf_presets[i].name) {
+			conf.append((const char *)dosdrv_conf_presets[i].data, dosdrv_conf_presets[i].len);
+			conf += "\n";
+			break;
+		}
+	}
+	conf += "[joystick]\njoysticktype = ";
+	conf += m.joysticks ? "2axis\n" : "none\n";
+	if (m.memsizeMB >= 0) conf += "\n[dosbox]\nmemsize = " + std::to_string(m.memsizeMB) + "\n";
+	if (m.cpuCycles >= 0) conf += "\n[cpu]\ncycles = " + std::to_string(m.cpuCycles) + "\n";
+
+	conf += "\n[autoexec]\n@echo off\n";
+	// what the loaded file IS: the frontend mounts it under the fixed name
+	// "rom" and the extension (rom.name) says how the machine takes it
+	static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
+	for (const char *e : floppyExts) {
+		if (m.romExt == e) { conf += std::string("imgmount a rom -t floppy\n"); break; }
+	}
+	if (m.romExt == ".iso" || m.romExt == ".cue") conf += "imgmount d rom -t iso\n";
+	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
+
+	if (!m.extraConf.empty()) {
+		conf += "\n";
+		conf += m.extraConf;
+		conf += "\n";
+	}
+	return conf;
+}
+
+uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, size_t *zstLen)
+{
+	for (size_t i = 0; i < sizeof dosdrv_formatted_disks / sizeof dosdrv_formatted_disks[0]; i++) {
+		if (name == dosdrv_formatted_disks[i].name) {
+			if (zst) *zst = dosdrv_formatted_disks[i].zst;
+			if (zstLen) *zstLen = dosdrv_formatted_disks[i].zstLen;
+			return dosdrv_formatted_disks[i].imageSize;
+		}
+	}
+	return 0;
+}
+
 // ---- the HDD memory file --------------------------------------------------
 #define FAT_SECTOR_SIZE 512
-static constexpr char writableHDDSrcFile[] = "HardDiskDrive";
 static constexpr char writableHDDDstFile[] = "HardDiskDrive.img";
 
 static bool loadFileIntoMemoryFile(const std::string &srcFile, const std::string &dstFile, const ssize_t dstSize = -1)
@@ -150,6 +208,32 @@ static bool loadFileIntoMemoryFile(const std::string &srcFile, const std::string
 	return true;
 }
 
+// Seeds the HDD memory file from an in-memory zstd head, grown to dstSize.
+static bool loadZstIntoMemoryFile(const uint8_t *zst, size_t zstLen, const std::string &dstFile, uint64_t dstSize)
+{
+	if (dstSize % FAT_SECTOR_SIZE != 0) {
+		fprintf(stderr, "formatted disk size not sector divisible: %llu\n", (unsigned long long)dstSize);
+		return false;
+	}
+	unsigned long long headLen = ZSTD_getFrameContentSize(zst, zstLen);
+	if (headLen == ZSTD_CONTENTSIZE_ERROR || headLen == ZSTD_CONTENTSIZE_UNKNOWN || headLen > dstSize) {
+		fprintf(stderr, "formatted disk head is not readable zstd\n");
+		return false;
+	}
+	std::vector<uint8_t> head((size_t)headLen);
+	size_t got = ZSTD_decompress(head.data(), head.size(), zst, zstLen);
+	if (ZSTD_isError(got) || got != headLen) {
+		fprintf(stderr, "formatted disk head failed to decompress\n");
+		return false;
+	}
+	auto dst = _memFileDirectory.fopen(dstFile, "w");
+	if (dst == NULL) return false;
+	if (dst->resize((ssize_t)dstSize) != 0) { _memFileDirectory.fclose(dst); return false; }
+	auto written = jaffarCommon::file::MemoryFile::fwrite(head.data(), 1, head.size(), dst);
+	_memFileDirectory.fclose(dst);
+	return (size_t)written == head.size();
+}
+
 uint8_t *dosdrv_hdd_buffer()
 {
 	if (!_memFileDirectory.contains(writableHDDDstFile)) return nullptr;
@@ -187,12 +271,22 @@ static uint32_t _lastFrameTicks = 0;
 
 bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 {
+	_composedConf = cfg.confText;
+
 	if (cfg.writableHDDImageSize == 0) {
 		printf("No writable hard disk drive selected.\n");
 	} else {
-		printf("Creating hard disk drive mem file '%s' -> '%s' (%llu bytes)\n",
-			writableHDDSrcFile, writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
-		bool result = loadFileIntoMemoryFile(writableHDDSrcFile, writableHDDDstFile, (ssize_t)cfg.writableHDDImageSize);
+		bool result;
+		if (!cfg.hddSeedFile.empty()) {
+			printf("Creating hard disk drive mem file '%s' -> '%s' (%llu bytes)\n",
+				cfg.hddSeedFile.c_str(), writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
+			result = loadFileIntoMemoryFile(cfg.hddSeedFile, writableHDDDstFile, (ssize_t)cfg.writableHDDImageSize);
+		} else {
+			printf("Creating formatted hard disk drive mem file '%s' (%llu bytes)\n",
+				writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
+			result = loadZstIntoMemoryFile(cfg.hddSeedZst, cfg.hddSeedZstLen,
+				writableHDDDstFile, cfg.writableHDDImageSize);
+		}
 		if (!result || !_memFileDirectory.contains(writableHDDDstFile)) {
 			if (err) *err = "could not create the hard disk drive mem file";
 			return false;

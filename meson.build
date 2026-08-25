@@ -33,6 +33,7 @@ add_project_arguments(defs + quiet, language: ['c', 'cpp'])
 inc = include_directories(
   'waterbox',
   'extern/dosbox-x/vs/zlib',
+  'extern/dosbox-x/src/libs/libchdr/zstd',
   'extern/vendored/SDL2/include',
   'extern/vendored/SDL2/src',
   'extern/vendored/libco',
@@ -560,7 +561,17 @@ chdflac = static_library('chdflac',
   include_directories: inc,
   c_args: ['-DDRFLAC_API=static'])
 
-driver_sources = files('waterbox/dosbox-driver.cpp')
+# the embedded conf presets + formatted disk heads, generated into each build
+# dir and included by the driver (identical composition in both machines)
+py = find_program('python3')
+conf_assets = custom_target('conf-assets',
+  output: 'dosbox_conf_assets.h',
+  input: files('waterbox/gen-assets.py'),
+  command: [py, '@INPUT@', '@OUTPUT@',
+            meson.current_source_dir() / 'waterbox/conf',
+            meson.current_source_dir() / 'waterbox/hdd'])
+
+driver_sources = files('waterbox/dosbox-driver.cpp') + [conf_assets]
 
 if meson.is_cross_build()
   # ---- the guest: core.wbx ------------------------------------------------

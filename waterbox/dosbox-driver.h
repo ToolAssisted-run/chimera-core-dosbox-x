@@ -17,17 +17,43 @@
 inline constexpr int DOSDRV_KEY_COUNT = 0x65; // KBD_KEYS as the input array size
 
 struct DosDrvConfig {
-	// The full composed dosbox-x.conf text (base + machine preset + sections +
-	// autoexec + user confs). The driver writes nothing; the HOST places it
-	// where dosbox-x will read it (a mounted "dosbox-x.conf" in the guest, a
-	// work-directory file natively).
 	bool joystick1Enabled = false;
 	bool joystick2Enabled = false;
-	// Nonzero = mount a writable hard disk: the read-only "HardDiskDrive"
-	// file is copied into the in-guest memory file "HardDiskDrive.img"
-	// (pre-seal, so savestates only carry dirtied pages), grown to this size.
+	// The writable hard disk (the in-memory "HardDiskDrive.img", seeded
+	// pre-seal so savestates only carry dirtied pages): the seed is either a
+	// readable file (a mounted .hdd rom) or an embedded zstd disk head, grown
+	// to writableHDDImageSize. Zero size = no hard disk.
 	uint64_t writableHDDImageSize = 0;
+	std::string hddSeedFile;              // "" = use the zst seed instead
+	const uint8_t *hddSeedZst = nullptr;  // a dosdrv_formatted_disk head
+	size_t hddSeedZstLen = 0;
+	// The composed dosbox-x.conf. When dosbox cannot open the file by name
+	// (nothing mounted it), Config::ParseConfigFile falls back to this text -
+	// so the GUEST composes its own configuration from settings, and a host
+	// that stages a real file (run-native's work directory) wins.
+	std::string confText;
 };
+
+// ---- configuration composition (shared by both builds - the gate compares
+// the machines, so the text must be identical by construction) --------------
+
+struct DosDrvMachine {
+	std::string machinePreset = "1991_ibm_ps2_25_386"; // a dosdrv_conf_presets name
+	bool joysticks = false;
+	int32_t memsizeMB = -1;  // -1 = the preset's value
+	int32_t cpuCycles = -1;  // -1 = the preset's value
+	std::string romExt;      // lowercased extension of the loaded file ("" = none)
+	bool hddMounted = false; // a HardDiskDrive.img memory file exists
+	std::string extraConf;   // appended last (a .conf rom's text)
+};
+
+// The composed dosbox-x.conf: base conf + machine preset + the settings'
+// sections + an autoexec mounting the loaded file ("rom") and the hard disk.
+std::string dosdrv_compose_conf(const DosDrvMachine &m);
+
+// The embedded pre-formatted FAT16 disks ("21mb".."2014mb"): returns the
+// full image size and points at the zstd-compressed head, or 0 for none.
+uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, size_t *zstLen);
 
 struct DosDrvJoystick {
 	bool up = false, down = false, left = false, right = false;

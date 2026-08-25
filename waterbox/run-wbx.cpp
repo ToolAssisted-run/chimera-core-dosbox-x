@@ -1,15 +1,15 @@
 // Standalone driver for the waterboxed DOSBox-X core: runs core.wbx through
-// the miniBox host and reports the same per-frame video/audio and final
-// memory-domain digests as run-native, so the two builds diff directly.
+// the miniBox host EXACTLY as the frontend does - the file mounted as "rom" +
+// "rom.name", the machine knobs as the "settings" JSON the guest composes its
+// configuration from, and input through the SetButton wide-input export - and
+// reports the same digests as run-native, so the two builds diff directly.
 //
-// usage: run-wbx <core.wbx> --conf <composed dosbox-x.conf> [--frames N]
-//        [--hdd IMG] [--hdd-grow BYTES] [--floppy IMG]... [--type TEXT]
-//        [--joysticks] [--rerecord] [--savedata-out DIR]
+// usage: run-wbx <core.wbx> [--rom FILE] [--preset NAME] [--formatted-hdd N]
+//        [--memsize MB] [--cycles N] [--joysticks] [--frames N] [--type TEXT]
+//        [--rerecord] [--savedata-out DIR]
 //
-// The conf arrives PRE-COMPOSED (the gate takes the one run-native wrote), so
-// both machines read byte-identical configuration. The typing schedule must
-// stay in lockstep with run-native's: one key event phase every frame from
-// frame 140, 2 held + 2 released per character.
+// The typing schedule stays in lockstep with run-native's: one key event
+// phase per frame from frame 140, 2 held + 2 released per character.
 #include "minibox.h"
 
 #include <cstdio>
@@ -20,7 +20,6 @@
 
 #include <sys/stat.h>
 
-#include "waterbox-input.h"
 #include <keyboard.h> // KBD_* values; no other dosbox headers needed
 
 static uint64_t fnv(uint64_t h, const void *p, size_t n)
@@ -86,6 +85,7 @@ static KBD_KEYS keyForChar(char c, bool *shift)
 
 typedef int (MB_GUEST_ABI *intfn)(void);
 typedef void (MB_GUEST_ABI *framefn)(uint64_t);
+typedef void (MB_GUEST_ABI *setfn)(int32_t, int32_t);
 typedef uintptr_t (MB_GUEST_ABI *ptrfn)(void);
 typedef uintptr_t (MB_GUEST_ABI *ptrfn_i)(int);
 typedef int64_t (MB_GUEST_ABI *i64fn_i)(int);
@@ -108,8 +108,6 @@ static void makeParentDirs(const char *path)
 	}
 }
 
-// --savedata-out: walk the savedata guest ABI group exactly as the frontend
-// does and write the tree for the gate to diff against run-native's.
 static int exportSaveData(mb_host *h, const char *dir)
 {
 	intfn Count = (intfn)proc(h, "GetSaveDataFileCount");
@@ -134,18 +132,19 @@ static int exportSaveData(mb_host *h, const char *dir)
 
 int main(int argc, char **argv)
 {
-	const char *wbxPath = nullptr, *confPath = nullptr, *hdd = nullptr;
+	const char *wbxPath = nullptr, *rom = nullptr;
 	const char *typeText = nullptr, *savedataOut = nullptr;
-	std::vector<const char *> floppies;
-	uint64_t hddGrow = 0;
+	const char *preset = nullptr, *formattedHdd = nullptr;
+	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
 	bool rerecord = false, joysticks = false;
 
 	for (int i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--conf") && i + 1 < argc) confPath = argv[++i];
-		else if (!strcmp(argv[i], "--hdd") && i + 1 < argc) hdd = argv[++i];
-		else if (!strcmp(argv[i], "--hdd-grow") && i + 1 < argc) hddGrow = strtoull(argv[++i], 0, 0);
-		else if (!strcmp(argv[i], "--floppy") && i + 1 < argc) floppies.push_back(argv[++i]);
+		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
+		else if (!strcmp(argv[i], "--preset") && i + 1 < argc) preset = argv[++i];
+		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
+		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) memsize = atoi(argv[++i]);
+		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) cycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = strtol(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--type") && i + 1 < argc) typeText = argv[++i];
 		else if (!strcmp(argv[i], "--savedata-out") && i + 1 < argc) savedataOut = argv[++i];
@@ -154,17 +153,14 @@ int main(int argc, char **argv)
 		else if (!wbxPath) wbxPath = argv[i];
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
-	if (!wbxPath || !confPath) {
-		fprintf(stderr, "usage: run-wbx <core.wbx> --conf <dosbox-x.conf> [--frames N] ...\n");
+	if (!wbxPath) {
+		fprintf(stderr, "usage: run-wbx <core.wbx> [--rom FILE] [--preset NAME] ...\n");
 		return 2;
 	}
 
 	FILE *wf = fopen(wbxPath, "rb");
 	if (!wf) { fprintf(stderr, "cannot open %s\n", wbxPath); return 1; }
 
-	// DOSBox is a big machine: its RAM (up to 64MB+), SDL, the mixer and the
-	// HDD memory file all live in ordinary heaps; big allocations (the HDD)
-	// go to musl's mmap path.
 	mb_memory_layout_template layout = { 256u << 20, 16u << 20, 16u << 20, 64u << 20, 1024u << 20 };
 	freader fr = { wf };
 	mb_return r;
@@ -173,39 +169,41 @@ int main(int argc, char **argv)
 	if (r.error_message[0]) { fprintf(stderr, "create: %s\n", r.error_message); return 1; }
 	mb_host *h = (mb_host *)r.data;
 
-	auto mountFile = [&](const char *name, const char *path) {
-		FILE *f = fopen(path, "rb");
-		if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }
+	// the file, under the frontend's fixed names
+	if (rom) {
+		FILE *f = fopen(rom, "rb");
+		if (!f) { fprintf(stderr, "cannot open %s\n", rom); return 1; }
 		freader rd = { f };
-		mb_return rr;
-		wbx_mount_file(h, name, file_read, (uintptr_t)&rd, false, &rr);
+		wbx_mount_file(h, "rom", file_read, (uintptr_t)&rd, false, &r);
 		fclose(f);
-		if (rr.error_message[0]) { fprintf(stderr, "mount %s: %s\n", name, rr.error_message); exit(1); }
+		if (r.error_message[0]) { fprintf(stderr, "mount rom: %s\n", r.error_message); return 1; }
+		const char *base = strrchr(rom, '/');
+		base = base ? base + 1 : rom;
+		memreader nr = { (const uint8_t *)base, strlen(base), 0 };
+		wbx_mount_file(h, "rom.name", mem_reader, (uintptr_t)&nr, false, &r);
+		if (r.error_message[0]) { fprintf(stderr, "mount rom.name: %s\n", r.error_message); return 1; }
+	}
+
+	// the settings channel, exactly the frontend's shape (a flat JSON object)
+	std::string settings = "{";
+	auto addStr = [&](const char *k, const char *v) {
+		if (settings.size() > 1) settings += ",";
+		settings += std::string("\"") + k + "\":\"" + v + "\"";
 	};
-
-	mountFile("dosbox-x.conf", confPath);
-
-	uint64_t hddSize = 0;
-	if (hdd) {
-		struct stat st;
-		if (stat(hdd, &st) != 0) { fprintf(stderr, "cannot stat %s\n", hdd); return 1; }
-		hddSize = hddGrow > (uint64_t)st.st_size ? hddGrow : (uint64_t)st.st_size;
-		mountFile("HardDiskDrive", hdd);
-	}
-	for (size_t i = 0; i < floppies.size(); i++) {
-		const char *ext = strrchr(floppies[i], '.');
-		std::string name = "FloppyDisk" + std::to_string(i) + (ext ? ext : ".img");
-		mountFile(name.c_str(), floppies[i]);
-	}
-
-	// the boot channel waterbox.cpp reads (hdd size + joystick enables)
-	char drvconfig[128];
-	snprintf(drvconfig, sizeof drvconfig, "hddSize=%llu\njoy1=%d\njoy2=%d\n",
-		(unsigned long long)hddSize, joysticks ? 1 : 0, joysticks ? 1 : 0);
+	auto addNum = [&](const char *k, long v) {
+		if (settings.size() > 1) settings += ",";
+		settings += std::string("\"") + k + "\":" + std::to_string(v);
+	};
+	if (preset) addStr("machinePreset", preset);
+	if (formattedHdd) addStr("formattedHardDisk", formattedHdd);
+	if (memsize != -1000000) addNum("memsizeMB", memsize);
+	if (cycles != -1000000) addNum("cpuCycles", cycles);
+	if (joysticks) { if (settings.size() > 1) settings += ","; settings += "\"joysticksEnabled\":true"; }
+	settings += "}";
 	{
-		memreader mr = { (const uint8_t *)drvconfig, strlen(drvconfig), 0 };
-		wbx_mount_file(h, "drvconfig", mem_reader, (uintptr_t)&mr, false, &r);
-		if (r.error_message[0]) { fprintf(stderr, "mount drvconfig: %s\n", r.error_message); return 1; }
+		memreader sr = { (const uint8_t *)settings.data(), settings.size(), 0 };
+		wbx_mount_file(h, "settings", mem_reader, (uintptr_t)&sr, false, &r);
+		if (r.error_message[0]) { fprintf(stderr, "mount settings: %s\n", r.error_message); return 1; }
 	}
 
 	wbx_activate_host(h, &r);
@@ -217,7 +215,7 @@ int main(int argc, char **argv)
 	}
 
 	framefn FrameAdvance = (framefn)proc(h, "FrameAdvance");
-	ptrfn GetInputBuffer = (ptrfn)proc(h, "GetInputBuffer");
+	setfn SetButton = (setfn)proc(h, "SetButton");
 	ptrfn GetVideoBgra = (ptrfn)proc(h, "GetVideoBgra");
 	intfn GetVideoWidth = (intfn)proc(h, "GetVideoWidth");
 	intfn GetVideoHeight = (intfn)proc(h, "GetVideoHeight");
@@ -233,11 +231,11 @@ int main(int argc, char **argv)
 	if (r.error_message[0]) { fprintf(stderr, "seal: %s\n", r.error_message); return 1; }
 	wbx_activate_host(h, &r);
 
-	WbxInput *input = (WbxInput *)GetInputBuffer();
 	uint64_t vh = 0, ah = 0;
 	membuf st = {0};
 	size_t typePos = 0;
 	int typePhase = 0;
+	int prevKey = -1, prevShift = 0;
 
 	for (long i = 0; i < frames; i++) {
 		if (rerecord) {
@@ -248,18 +246,26 @@ int main(int argc, char **argv)
 			if (r.error_message[0]) { fprintf(stderr, "rerecord: %s\n", r.error_message); return 1; }
 		}
 
-		memset(input->keys, 0, sizeof input->keys);
-		input->insertFloppyDisk = -1;
-		input->insertCDROM = -1;
-		// the typing schedule, in lockstep with run-native
+		// typing through the WIDE-INPUT export, in lockstep with run-native:
+		// config button index = KBD value - 1 (gen-config.py's order)
+		int key = -1, shift = 0;
 		if (typeText && i >= 140 && typeText[typePos] != '\0') {
-			bool shift = false;
-			KBD_KEYS k = keyForChar(typeText[typePos], &shift);
+			bool sh = false;
+			KBD_KEYS k = keyForChar(typeText[typePos], &sh);
 			if (typePhase < 2) {
-				if (k != KBD_NONE) input->keys[k] = 1;
-				if (shift) input->keys[KBD_leftshift] = 1;
+				if (k != KBD_NONE) key = (int)k - 1;
+				if (sh) shift = 1;
 			}
 			if (++typePhase == 4) { typePhase = 0; typePos++; }
+		}
+		if (key != prevKey) {
+			if (prevKey >= 0) SetButton(prevKey, 0);
+			if (key >= 0) SetButton(key, 1);
+			prevKey = key;
+		}
+		if (shift != prevShift) {
+			SetButton((int)KBD_leftshift - 1, shift);
+			prevShift = shift;
 		}
 
 		FrameAdvance(0);

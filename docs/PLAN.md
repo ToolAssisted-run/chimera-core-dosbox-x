@@ -350,8 +350,30 @@ build/meson-native` produces run-native. Patches overlay at every
       correctness; run-gate.sh native==sandbox==rerecord green.
 - [ ] M4: HDD memfile + savedata export group + gate leg (a .com writes
       C:\SAVE.DAT; export trees must match everywhere).
-- [ ] M5: Chimera package (waterbox.config, settings, default_keybinds,
-      build-package.sh), frontend gate legs green; reduced keyboard until
-      wide input lands.
+- [x] M5: the Chimera package (2026-08-25). The guest COMPOSES its own
+      dosbox-x.conf from the settings channel (machinePreset,
+      formattedHardDisk, memsizeMB, cpuCycles, joysticksEnabled,
+      mouseSensitivity) using conf presets and formatted-disk heads
+      embedded at build time (gen-assets.py); a small setup.cpp patch
+      lets ParseConfigFile read the composed text from memory when no
+      real file exists, so run-native (which stages a work directory)
+      and the frontend (which mounts nothing but rom+settings) reach
+      identical configuration through dosdrv_compose_conf. The loaded
+      file routes by rom.name extension when a host provides one, else
+      by SNIFFING (text = extra conf, <= 2.88MB = floppy, else hard
+      disk) - mounted files may be reopened after close, one open at a
+      TIME is the miniBox contract. waterbox.config +
+      default_keybinds.json are GENERATED from the real KBD_KEYS enum
+      (gen-config.py, order verified): 121 buttons (100 keys + 2
+      joysticks + 3 mouse + 6 disk-swap) through the wide-input
+      SetButton export, 4 mouse axes, full keyboard bound 1:1 to the
+      host. Chimera grew dynamic video size for this (config = buffer
+      capacity, GetVideoWidth/Height = live size; 720x400 text in a
+      1024x768 buffer). run-gate.sh: boot + hdd (settings-mounted
+      formatted disk, typed DOS write, savedata trees) + machine-preset
+      legs, all native==sandbox==rerecord. tests/run-frontend.sh 4/4:
+      RAM slice identical to native through the real frontend, preset
+      setting arrives, 121+4 keybinds adopted, savedata engine export
+      == sandbox runner. deterministic package -> build/Cores/dosbox-x.zip.
 - [ ] M6: CD direct-mount proof (free cue/bin), floppy swapping, drive
       light; then real content with the user's movies.
