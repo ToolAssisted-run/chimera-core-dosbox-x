@@ -1,7 +1,7 @@
 # chimera-core-dosbox-x
 
 **DOSBox-X as a Chimera waterbox core** - the [DOSBox-X](https://github.com/joncampbell123/dosbox-x)
-DOS/PC emulator, compiled into [miniBox](https://github.com/SergioMartin86/miniBox)'s
+DOS/PC emulator, compiled into [miniBox](https://github.com/ToolAssisted-run/chimera-common-minibox)'s
 deterministic sandbox and packaged as a Chimera core (`core.wbx` + `waterbox.config`),
 the same shape as
 [chimera-core-ppsspp](https://github.com/ToolAssisted-run/chimera-core-ppsspp),
