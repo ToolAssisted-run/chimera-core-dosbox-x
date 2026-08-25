@@ -161,6 +161,7 @@ int main(int argc, char **argv)
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
 	bool rerecord = false, joysticks = false, exercise = false;
+	std::vector<std::string> extraSettings; // KEY=VALUE, string or number
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
@@ -187,6 +188,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--rerecord")) rerecord = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
+		else if (!strcmp(argv[i], "--setting") && i + 1 < argc) extraSettings.push_back(argv[++i]);
 		else if (!wbxPath) wbxPath = argv[i];
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
@@ -248,7 +250,22 @@ int main(int argc, char **argv)
 	if (bootDrive) addStr("bootDrive", bootDrive);
 	if (memsize != -1000000) addNum("memsizeMB", memsize);
 	if (cycles != -1000000) addNum("cpuCycles", cycles);
-	if (joysticks) { if (settings.size() > 1) settings += ","; settings += "\"joysticksEnabled\":true"; }
+	if (joysticks) {
+		if (settings.size() > 1) settings += ",";
+		settings += "\"joystick1Enabled\":true,\"joystick2Enabled\":true";
+	}
+	for (const std::string &spec : extraSettings) {
+		auto eq = spec.find('=');
+		if (eq == std::string::npos) { fprintf(stderr, "--setting wants KEY=VALUE\n"); return 2; }
+		std::string k = spec.substr(0, eq), v = spec.substr(eq + 1);
+		char *end = nullptr;
+		strtod(v.c_str(), &end);
+		bool numeric = end && *end == '\0' && !v.empty();
+		bool boolean = v == "true" || v == "false";
+		if (settings.size() > 1) settings += ",";
+		if (numeric || boolean) settings += "\"" + k + "\":" + v;
+		else settings += "\"" + k + "\":\"" + v + "\"";
+	}
 	settings += "}";
 	{
 		memreader sr = { (const uint8_t *)settings.data(), settings.size(), 0 };
@@ -300,13 +317,13 @@ int main(int argc, char **argv)
 		}
 
 		// typing through the WIDE-INPUT export, in lockstep with run-native:
-		// config button index = KBD value - 1 (gen-config.py's order)
+		// config button index = EX_BTN_KEYS + KBD value - 1 (gen-config.py)
 		int key = -1, shift = 0;
 		if (typeText && i >= 140 && typeText[typePos] != '\0') {
 			bool sh = false;
 			KBD_KEYS k = keyForChar(typeText[typePos], &sh);
 			if (typePhase < 2) {
-				if (k != KBD_NONE) key = (int)k - 1;
+				if (k != KBD_NONE) key = EX_BTN_KEYS + (int)k - 1;
 				if (sh) shift = 1;
 			}
 			if (++typePhase == 4) { typePhase = 0; typePos++; }
@@ -317,7 +334,7 @@ int main(int argc, char **argv)
 			prevKey = key;
 		}
 		if (shift != prevShift) {
-			SetButton((int)KBD_leftshift - 1, shift);
+			SetButton(EX_BTN_KEYS + (int)KBD_leftshift - 1, shift);
 			prevShift = shift;
 		}
 

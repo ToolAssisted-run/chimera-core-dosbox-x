@@ -15,10 +15,11 @@
 #define EX_START_FRAME 300
 
 /* the config's button index blocks (gen-config.py's order) */
-#define EX_BTN_JOY1 100 /* up down left right b1 b2 */
-#define EX_BTN_JOY2 106
-#define EX_BTN_MOUSE 112 /* left middle right */
-#define EX_BTN_SWAP 115  /* prevFD nextFD swapFD prevCD nextCD swapCD */
+#define EX_BTN_JOY1 0 /* up down left right b1 b2 */
+#define EX_BTN_JOY2 6
+#define EX_BTN_MOUSE 12 /* left middle right */
+#define EX_BTN_SWAP 15  /* prevFD nextFD swapFD prevCD nextCD swapCD */
+#define EX_BTN_KEYS 21  /* KBD_KEYS 1..102 */
 
 typedef struct {
 	int32_t posX, posY, spdX, spdY;

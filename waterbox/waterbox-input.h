@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-#define WBX_KEY_COUNT 0x65 /* KBD_KEYS */
+#define WBX_KEY_COUNT 0x67 /* KBD_NONE + the 102 keys the wire format carries */
 
 typedef struct {
 	uint8_t up, down, left, right;

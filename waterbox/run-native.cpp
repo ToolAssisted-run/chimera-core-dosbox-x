@@ -169,7 +169,13 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
-		else if (!strcmp(argv[i], "--joysticks")) m.joysticks = true;
+		else if (!strcmp(argv[i], "--joysticks")) { m.joystick1 = true; m.joystick2 = true; }
+		else if (!strcmp(argv[i], "--no-joysticks")) { m.joystick1 = false; m.joystick2 = false; }
+		else if (!strcmp(argv[i], "--cpu-type") && i + 1 < argc) m.cpuType = argv[++i];
+		else if (!strcmp(argv[i], "--video-card") && i + 1 < argc) m.videoCardType = argv[++i];
+		else if (!strcmp(argv[i], "--pc-speaker") && i + 1 < argc) m.pcSpeaker = argv[++i];
+		else if (!strcmp(argv[i], "--sb-model") && i + 1 < argc) m.soundBlasterModel = argv[++i];
+		else if (!strcmp(argv[i], "--sb-irq") && i + 1 < argc) m.soundBlasterIRQ = atoi(argv[++i]);
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
 
@@ -180,8 +186,8 @@ int main(int argc, char **argv)
 	mkdir(workdir, 0777);
 
 	DosDrvConfig cfg;
-	cfg.joystick1Enabled = m.joysticks;
-	cfg.joystick2Enabled = m.joysticks;
+	cfg.joystick1Enabled = m.joystick1;
+	cfg.joystick2Enabled = m.joystick2;
 
 	std::string romExt;
 	if (rom) {

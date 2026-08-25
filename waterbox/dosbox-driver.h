@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <string>
 
-inline constexpr int DOSDRV_KEY_COUNT = 0x65; // KBD_KEYS as the input array size
+inline constexpr int DOSDRV_KEY_COUNT = 0x67; // KBD_NONE + the 102 keys the wire format carries
 
 struct DosDrvConfig {
 	bool joystick1Enabled = false;
@@ -38,10 +38,16 @@ struct DosDrvConfig {
 // the machines, so the text must be identical by construction) --------------
 
 struct DosDrvMachine {
-	std::string machinePreset = "1991_ibm_ps2_25_386"; // a dosdrv_conf_presets name
-	bool joysticks = false;
+	std::string machinePreset = "1993_ibm_ps2_53_slc2_486"; // a dosdrv_conf_presets name
+	bool joystick1 = true;   // plugged into gameport 1
+	bool joystick2 = true;   // plugged into gameport 2
 	int32_t memsizeMB = -1;  // -1 = the preset's value
 	int32_t cpuCycles = -1;  // -1 = the preset's value
+	std::string cpuType = "auto";        // conf cputype when not "auto"
+	std::string videoCardType = "auto";  // conf machine= when not "auto"
+	std::string pcSpeaker = "auto";      // "disabled"/"enabled" when not "auto"
+	std::string soundBlasterModel = "auto"; // conf sbtype when not "auto"
+	int32_t soundBlasterIRQ = -1;        // conf irq when not -1
 	std::string romExt;      // lowercased extension of the loaded file ("" = none)
 	int32_t extraImageCount = 0; // additional images mounted as rom2..romN, joining the drive's swap list
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
@@ -67,7 +73,7 @@ struct DosDrvMouse {
 	int32_t speedX = 0, speedY = 0;  // relative movement this frame
 	bool leftPressed = false, middlePressed = false, rightPressed = false;
 	bool leftReleased = false, middleReleased = false, rightReleased = false;
-	float sensitivity = 1.0f;
+	float sensitivity = 3.0f; // BizHawk's Mouse Relative Sensitivity default
 };
 
 struct DosDrvInput {

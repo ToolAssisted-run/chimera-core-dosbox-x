@@ -96,10 +96,19 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 			break;
 		}
 	}
+	// The section order below mirrors the author's BizHawk integration
+	// (DOSBox.cs's configuration composition), so the same settings produce
+	// the same machine and a finished BizHawk movie stays convertible.
 	conf += "[joystick]\njoysticktype = ";
-	conf += m.joysticks ? "2axis\n" : "none\n";
-	if (m.memsizeMB >= 0) conf += "\n[dosbox]\nmemsize = " + std::to_string(m.memsizeMB) + "\n";
-	if (m.cpuCycles >= 0) conf += "\n[cpu]\ncycles = " + std::to_string(m.cpuCycles) + "\n";
+	conf += (m.joystick1 || m.joystick2) ? "2axis\n" : "none\n";
+	conf += "[speaker]\n";
+	if (m.pcSpeaker == "disabled") conf += "pcspeaker = Disabled\n";
+	if (m.pcSpeaker == "enabled") conf += "pcspeaker = Enabled\n";
+	conf += "\n[sblaster]\n";
+	if (m.soundBlasterModel != "auto") conf += "sbtype = " + m.soundBlasterModel + "\n";
+	if (m.soundBlasterIRQ != -1) conf += "irq = " + std::to_string(m.soundBlasterIRQ) + "\n";
+	conf += "\n[dosbox]\n";
+	if (m.memsizeMB >= 0) conf += "memsize = " + std::to_string(m.memsizeMB) + "\n";
 
 	conf += "\n[autoexec]\n@echo off\n";
 	// what the loaded file IS: the frontend mounts it under the fixed name
@@ -118,15 +127,23 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		conf += "imgmount d rom" + extras + " -t iso\n";
 	}
 	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
+	if (m.bootDrive == "a" || m.bootDrive == "c") {
+		// the very last autoexec line: boot never returns to the shell
+		// (a chimera addition; BizHawk movies run with bootDrive none)
+		conf += "boot " + m.bootDrive + ":\n";
+	}
+
+	// BizHawk emits [cpu] and the machine override AFTER the autoexec
+	conf += "\n[cpu]\n";
+	if (m.cpuCycles >= 0) conf += "cycles = " + std::to_string(m.cpuCycles) + "\n";
+	if (m.cpuType != "auto") conf += "cputype = " + m.cpuType + "\n";
+	conf += "\n[dosbox]\n";
+	if (m.videoCardType != "auto") conf += "machine = " + m.videoCardType + "\n";
 
 	if (!m.extraConf.empty()) {
 		conf += "\n";
 		conf += m.extraConf;
 		conf += "\n";
-	}
-	if (m.bootDrive == "a" || m.bootDrive == "c") {
-		// the very last autoexec line: boot never returns to the shell
-		conf += "\n[autoexec]\nboot " + m.bootDrive + ":\n";
 	}
 	return conf;
 }

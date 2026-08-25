@@ -105,6 +105,26 @@ else
 	echo "PASS preset (1983_ibm_xt5160: a different machine, and both builds agree on it)"
 fi
 
+# ---- the machine-knobs leg (the BizHawk-imported sync settings) ------------
+# The imported settings (video card, CPU type, PC speaker, Sound Blaster)
+# must reach the composed conf in both builds: a machine reshaped by all of
+# them must DIFFER from the default machine, and the builds must agree on it.
+knobs_native="--video-card cga --cpu-type 8086 --pc-speaker disabled --sb-model none"
+knobs_box="--setting videoCardType=cga --setting cpuType=8086 --setting pcSpeaker=disabled --setting soundBlasterModel=none"
+nat="$(timeout 600 "$rn" --workdir "$work/knobs" $knobs_native --frames "$frames" --gate 2>/dev/null | digests)"
+box="$(timeout 900 "$rw" "$core" $knobs_box --frames "$frames" 2>/dev/null | digests)"
+base="$(timeout 600 "$rn" --workdir "$work/base3" --frames "$frames" --gate 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL knobs (a run produced no digests)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL knobs (native vs sandbox on the reshaped machine)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$nat" = "$base" ]; then
+	echo "FAIL knobs (the settings did not change the machine)"; fail=1
+else
+	echo "PASS knobs (cga + 8086 + no speaker + no sblaster: a different machine, both builds agree)"
+fi
+
 # ---- the cd leg ------------------------------------------------------------
 # A machine-generated ISO9660 image (gen-testiso.py, free content) mounted as
 # D: through the autoexec, its one file typed at the prompt. The proof is
