@@ -40,6 +40,9 @@ mkdir -p "$staging"
 cp "$root/build/meson-guest/core.wbx" "$staging/core.wbx"
 cp "$here/waterbox.config" "$staging/waterbox.config"
 cp "$here/default_keybinds.json" "$staging/default_keybinds.json"
+# The core-declared file form for the project wizard (slots, cardinality,
+# formats, tooltips) - the frontend renders it, this file decides it.
+cp "$here/file_slots.json" "$staging/file_slots.json"
 
 # ---- version (see chimera docs: commit-as-version, stamped by CD) ----
 core_version="${CORE_VERSION:-}"
