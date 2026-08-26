@@ -16,6 +16,7 @@
 
 #include <emulibc.h>
 #include <waterbox_settings.h>
+#include <waterbox_slots.h>
 
 #include "dosbox-driver.h"
 #include "waterbox-input.h"
@@ -84,36 +85,20 @@ static SlotLists readSlots(void)
 	SlotLists out;
 	FILE *f = fopen("slots", "rb");
 	if (f == nullptr) return out;
-	std::string buf;
-	char chunk[4096];
-	size_t n;
-	while ((n = fread(chunk, 1, sizeof chunk, f)) > 0) buf.append(chunk, n);
 	fclose(f);
-
-	jsmn_parser p;
-	jsmn_init(&p);
-	jsmntok_t tok[512];
-	int r = jsmn_parse(&p, buf.c_str(), buf.size(), tok, sizeof tok / sizeof tok[0]);
-	if (r < 1 || tok[0].type != JSMN_OBJECT) return out;
 	out.present = true;
 
-	// {"floppy":["a.img","b.img"],...}: pairs of key + flat string array
-	int i = 1;
-	for (int pair = 0; pair < tok[0].size && i + 1 < r; pair++) {
-		std::string key(buf, (size_t)tok[i].start, (size_t)(tok[i].end - tok[i].start));
-		i++;
-		if (tok[i].type != JSMN_ARRAY) { i++; continue; }
-		int count = tok[i].size;
-		i++;
-		std::vector<std::string> *dst =
-			key == "floppy" ? &out.floppy :
-			key == "cdrom" ? &out.cdrom :
-			key == "hdd" ? &out.hdd :
-			key == "conf" ? &out.conf : nullptr;
-		for (int e = 0; e < count && i < r; e++, i++) {
-			if (dst != nullptr && tok[i].type == JSMN_STRING) {
-				dst->push_back(std::string(buf, (size_t)tok[i].start, (size_t)(tok[i].end - tok[i].start)));
-			}
+	const struct { const char *id; std::vector<std::string> *dst; } lists[] = {
+		{ "floppy", &out.floppy },
+		{ "cdrom", &out.cdrom },
+		{ "hdd", &out.hdd },
+		{ "conf", &out.conf },
+	};
+	char name[256];
+	for (const auto &l : lists) {
+		int count = wbx_slot_count(l.id);
+		for (int i = 0; i < count; i++) {
+			if (wbx_slot_name(l.id, i, name, sizeof name) != nullptr) l.dst->push_back(name);
 		}
 	}
 	return out;
