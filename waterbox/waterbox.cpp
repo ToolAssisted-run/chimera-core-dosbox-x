@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include <emulibc.h>
 #include <waterbox_settings.h>
@@ -65,6 +66,59 @@ static void refreshVideo(void)
 	g_videoValid = true;
 }
 
+// ---- the project's slot map -----------------------------------------------
+// A chimera project mounts "slots": a JSON object of slot id -> canonical
+// file names in swap order, each file mounted under its own name (see
+// chimera's docs/project.md and this repo's file_slots.json, which declares
+// what belongs where). When the map is present it IS the media list - the
+// rom sniffing below never runs - and mixed media finally works: floppies,
+// CDs and a hard disk in one machine.
+
+struct SlotLists {
+	bool present = false;
+	std::vector<std::string> floppy, cdrom, hdd, conf;
+};
+
+static SlotLists readSlots(void)
+{
+	SlotLists out;
+	FILE *f = fopen("slots", "rb");
+	if (f == nullptr) return out;
+	std::string buf;
+	char chunk[4096];
+	size_t n;
+	while ((n = fread(chunk, 1, sizeof chunk, f)) > 0) buf.append(chunk, n);
+	fclose(f);
+
+	jsmn_parser p;
+	jsmn_init(&p);
+	jsmntok_t tok[512];
+	int r = jsmn_parse(&p, buf.c_str(), buf.size(), tok, sizeof tok / sizeof tok[0]);
+	if (r < 1 || tok[0].type != JSMN_OBJECT) return out;
+	out.present = true;
+
+	// {"floppy":["a.img","b.img"],...}: pairs of key + flat string array
+	int i = 1;
+	for (int pair = 0; pair < tok[0].size && i + 1 < r; pair++) {
+		std::string key(buf, (size_t)tok[i].start, (size_t)(tok[i].end - tok[i].start));
+		i++;
+		if (tok[i].type != JSMN_ARRAY) { i++; continue; }
+		int count = tok[i].size;
+		i++;
+		std::vector<std::string> *dst =
+			key == "floppy" ? &out.floppy :
+			key == "cdrom" ? &out.cdrom :
+			key == "hdd" ? &out.hdd :
+			key == "conf" ? &out.conf : nullptr;
+		for (int e = 0; e < count && i < r; e++, i++) {
+			if (dst != nullptr && tok[i].type == JSMN_STRING) {
+				dst->push_back(std::string(buf, (size_t)tok[i].start, (size_t)(tok[i].end - tok[i].start)));
+			}
+		}
+	}
+	return out;
+}
+
 extern "C" {
 
 ECL_EXPORT const char *GetLoadError(void) { return g_loadError; }
@@ -82,8 +136,10 @@ ECL_EXPORT int Init(void)
 	// largest floppy is a floppy, bigger is a hard disk. Mounted files may
 	// be reopened after close (one open at a TIME is the contract), so the
 	// probe read here does not spend the imgmount's open.
+	SlotLists slots = readSlots();
 	std::string romExt;
 	bool haveRom = false;
+	if (!slots.present)
 	{
 		char romName[256] = "";
 		if (FILE *f = fopen("rom.name", "rb")) {
@@ -171,8 +227,43 @@ ECL_EXPORT int Init(void)
 	m.soundBlasterIRQ = sbIRQ;
 	m.bootDrive = bootDrive;
 
-	// ---- what the loaded file IS ------------------------------------------
-	if (haveRom && romExt == ".hdd") {
+	// ---- what the loaded files ARE ----------------------------------------
+	if (slots.present) {
+		// the project's slot map is the media list: every file is mounted
+		// under its canonical name, list order = swap order
+		m.floppyImages = slots.floppy;
+		m.cdImages = slots.cdrom;
+		if (!slots.hdd.empty()) {
+			// the hard disk slot's file seeds the writable disk (a fresh
+			// image or a previously exported one - same thing byte-wise)
+			uint64_t size = 0;
+			if (FILE *f = fopen(slots.hdd[0].c_str(), "rb")) {
+				fseek(f, 0, SEEK_END);
+				size = (uint64_t)ftell(f);
+				fclose(f);
+			} else {
+				snprintf(g_loadError, sizeof g_loadError,
+					"the hdd slot's '%s' is not mounted", slots.hdd[0].c_str());
+				return 0;
+			}
+			cfg.hddSeedFile = slots.hdd[0];
+			cfg.writableHDDImageSize = (size + 511) / 512 * 512;
+			m.hddMounted = true;
+		}
+		if (!slots.conf.empty()) {
+			// extra configuration, appended after everything the settings chose
+			if (FILE *f = fopen(slots.conf[0].c_str(), "rb")) {
+				char chunk[4096];
+				size_t n;
+				while ((n = fread(chunk, 1, sizeof chunk, f)) > 0) m.extraConf.append(chunk, n);
+				fclose(f);
+			} else {
+				snprintf(g_loadError, sizeof g_loadError,
+					"the conf slot's '%s' is not mounted", slots.conf[0].c_str());
+				return 0;
+			}
+		}
+	} else if (haveRom && romExt == ".hdd") {
 		// the file itself is the writable hard disk's seed
 		uint64_t size = 0;
 		if (FILE *f = fopen("rom", "rb")) {

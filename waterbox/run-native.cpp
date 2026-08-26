@@ -123,6 +123,8 @@ int main(int argc, char **argv)
 	const char *rom = nullptr;
 	const char *extraConfFile = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, staged beside the rom
+	std::vector<std::string> floppySpecs; // NAME=PATH, project-mode media lists
+	std::vector<std::string> cdSpecs;     // (the slot map's twin: name = mount name)
 	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
 	std::vector<std::pair<long, int>> swapFd;
 	const char *workdir = "work-native";
@@ -145,6 +147,8 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
 		else if (!strcmp(argv[i], "--extra-conf") && i + 1 < argc) extraConfFile = argv[++i];
 		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
+		else if (!strcmp(argv[i], "--floppy") && i + 1 < argc) floppySpecs.push_back(argv[++i]);
+		else if (!strcmp(argv[i], "--cd") && i + 1 < argc) cdSpecs.push_back(argv[++i]);
 		else if (!strcmp(argv[i], "--swap-cd") && i + 1 < argc) {
 			long fr = 0; int idx = 0;
 			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-cd wants FRAME:INDEX\n"); return 2; }
@@ -217,6 +221,21 @@ int main(int argc, char **argv)
 		if (!readWholeFile(spec.substr(eq + 1).c_str(), bytes)) { fprintf(stderr, "cannot read %s\n", spec.c_str()); return 1; }
 		if (!writeWholeFile(std::string(workdir) + "/" + spec.substr(0, eq), bytes.data(), bytes.size())) return 1;
 	}
+	// project-mode media lists: staged under their canonical names, list
+	// order = swap order, exactly what the guest builds from the slot map
+	auto stageMedia = [&](const std::vector<std::string> &specs, std::vector<std::string> &into) -> int {
+		for (const std::string &spec : specs) {
+			auto eq = spec.find('=');
+			if (eq == std::string::npos) { fprintf(stderr, "--floppy/--cd want NAME=PATH\n"); return 2; }
+			std::vector<uint8_t> bytes;
+			if (!readWholeFile(spec.substr(eq + 1).c_str(), bytes)) { fprintf(stderr, "cannot read %s\n", spec.c_str()); return 1; }
+			if (!writeWholeFile(std::string(workdir) + "/" + spec.substr(0, eq), bytes.data(), bytes.size())) return 1;
+			into.push_back(spec.substr(0, eq));
+		}
+		return 0;
+	};
+	if (stageMedia(floppySpecs, m.floppyImages) != 0) return 1;
+	if (stageMedia(cdSpecs, m.cdImages) != 0) return 1;
 	// extra swappable images staged as rom2..romN, same probe the guest runs
 	for (int i = 2; i <= 8; i++) {
 		struct stat st;

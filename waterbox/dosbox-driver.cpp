@@ -115,16 +115,32 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	// "rom" and the extension (rom.name) says how the machine takes it
 	// extra images (the rom2..romN convention) join the mount as a swap
 	// list; the disk-swap input controls cycle through them
-	std::string extras;
-	for (int32_t i = 0; i < m.extraImageCount; i++) {
-		extras += " rom" + std::to_string(i + 2);
-	}
-	static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
-	for (const char *e : floppyExts) {
-		if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; break; }
-	}
-	if (m.romExt == ".iso" || m.romExt == ".cue") {
-		conf += "imgmount d rom" + extras + " -t iso\n";
+	if (!m.floppyImages.empty() || !m.cdImages.empty()) {
+		// project mode: the slot map named every image; each list mounts on
+		// its own drive (mixed media works), listed order = swap order
+		auto mountList = [&conf](char drive, const std::vector<std::string> &names, const char *type) {
+			if (names.empty()) return;
+			conf += std::string("imgmount ") + drive;
+			for (const std::string &n : names) {
+				bool quote = n.find(' ') != std::string::npos;
+				conf += quote ? " \"" + n + "\"" : " " + n;
+			}
+			conf += std::string(" -t ") + type + "\n";
+		};
+		mountList('a', m.floppyImages, "floppy");
+		mountList('d', m.cdImages, "iso");
+	} else {
+		std::string extras;
+		for (int32_t i = 0; i < m.extraImageCount; i++) {
+			extras += " rom" + std::to_string(i + 2);
+		}
+		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
+		for (const char *e : floppyExts) {
+			if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; break; }
+		}
+		if (m.romExt == ".iso" || m.romExt == ".cue") {
+			conf += "imgmount d rom" + extras + " -t iso\n";
+		}
 	}
 	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
 	if (m.bootDrive == "a" || m.bootDrive == "c") {

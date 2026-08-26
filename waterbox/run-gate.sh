@@ -331,4 +331,41 @@ inputleg joystick 'd:\joytest.com
 inputleg mouse 'd:\mousetest.com
 ' ""
 
+# ---- the slots leg ---------------------------------------------------------
+# The project's slot map (chimera docs/project.md): MIXED media, which the
+# single-rom channel never allowed - two floppies on A:'s swap chain AND a
+# CD on D:, every file mounted by its canonical name, list order = swap
+# order. The sandbox reads the mounted "slots" JSON; the native side takes
+# the same lists through --floppy/--cd. Floppy 2 goes in through the swap
+# buttons and its file is typed, then a file from the CD - both only print
+# if the mixed mounts and the swap landed. Differential (no swap fails the
+# first type) plus native==sandbox==rerecord.
+printf '{"floppy":["fd1.img","fd2.img"],"cdrom":["test.iso"]}' > "$work/slots.json"
+mixedtype='type A:\HELLO2.TXT
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~type D:\HELLO.TXT
+'
+nat="$(timeout 900 "$rn" --workdir "$work/slots" --floppy "fd1.img=$work/fd1.img" --floppy "fd2.img=$work/fd2.img" \
+	--cd "test.iso=$work/test.iso" --frames "$swapframes" --gate --swap-fd 100:1 --type "$mixedtype" 2>/dev/null | digests)"
+natnoswap="$(timeout 900 "$rn" --workdir "$work/slots0" --floppy "fd1.img=$work/fd1.img" --floppy "fd2.img=$work/fd2.img" \
+	--cd "test.iso=$work/test.iso" --frames "$swapframes" --gate --type "$mixedtype" 2>/dev/null | digests)"
+box="$(timeout 1200 "$rw" "$core" --extra-file "slots=$work/slots.json" --extra-file "fd1.img=$work/fd1.img" \
+	--extra-file "fd2.img=$work/fd2.img" --extra-file "test.iso=$work/test.iso" \
+	--frames "$swapframes" --swap-fd 100:1 --type "$mixedtype" 2>/dev/null | digests)"
+rr="$(timeout 3600 "$rw" "$core" --extra-file "slots=$work/slots.json" --extra-file "fd1.img=$work/fd1.img" \
+	--extra-file "fd2.img=$work/fd2.img" --extra-file "test.iso=$work/test.iso" \
+	--frames "$swapframes" --swap-fd 100:1 --type "$mixedtype" --rerecord 2>/dev/null | digests)"
+if [ -z "$nat" ] || [ -z "$box" ]; then
+	echo "FAIL slots (a run produced no digests)"; fail=1
+elif [ "$nat" = "$natnoswap" ]; then
+	echo "FAIL slots (the floppy swap changed nothing)"; fail=1
+elif [ "$nat" != "$box" ]; then
+	echo "FAIL slots (native vs sandbox)"
+	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+elif [ "$box" != "$rr" ]; then
+	echo "FAIL slots (rerecord diverges)"
+	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
+else
+	echo "PASS slots ($swapframes frames, mixed floppies+CD by canonical names via the slot map, native==sandbox==rerecord)"
+fi
+
 exit $fail

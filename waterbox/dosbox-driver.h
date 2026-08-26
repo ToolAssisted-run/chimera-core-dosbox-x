@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 inline constexpr int DOSDRV_KEY_COUNT = 0x67; // KBD_NONE + the 102 keys the wire format carries
 
@@ -50,6 +51,10 @@ struct DosDrvMachine {
 	int32_t soundBlasterIRQ = -1;        // conf irq when not -1
 	std::string romExt;      // lowercased extension of the loaded file ("" = none)
 	int32_t extraImageCount = 0; // additional images mounted as rom2..romN, joining the drive's swap list
+	// project mode (the "slots" mount): images by canonical name, list order
+	// = swap order; when either list is nonempty the romExt path never runs
+	std::vector<std::string> floppyImages;
+	std::vector<std::string> cdImages;
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
 	std::string bootDrive = "none"; // "a"/"c": boot that drive instead of the DOS shell
 	std::string extraConf;   // appended last (a .conf rom's text)
