@@ -1,0 +1,43 @@
+{
+  "package": "dosbox-x",
+  "effectiveTerms": "GPL-2.0-or-later",
+  "commercialUse": "allowed under the GPL",
+  "note": "The built core combines this repository's MIT integration with DOSBox-X and is distributed under the GPL-2.0-or-later. The corresponding source of each part is linked below by exact commit.",
+  "components": [
+    {
+      "name": "chimera-core-dosbox-x (integration)",
+      "license": "MIT, with GPL-2.0-or-later patches and driver",
+      "url": "https://github.com/ToolAssisted-run/chimera-core-dosbox-x",
+      "commit": "{selfCommit}",
+      "file": "LICENSE",
+      "sourceUrl": "https://github.com/ToolAssisted-run/chimera-core-dosbox-x/archive/{commit}.tar.gz"
+    },
+    {
+      "name": "DOSBox-X",
+      "license": "GPL-2.0-or-later",
+      "url": "https://github.com/joncampbell123/dosbox-x",
+      "commit": "{submodule:extern/dosbox-x}",
+      "file": "extern/dosbox-x/COPYING",
+      "sourceUrl": "https://github.com/joncampbell123/dosbox-x/archive/{commit}.tar.gz"
+    },
+    {
+      "name": "SDL2 (vendored, modified for the sandbox)",
+      "license": "zlib",
+      "url": "https://github.com/libsdl-org/SDL",
+      "file": "extern/vendored/SDL2/LICENSE.txt"
+    },
+    {
+      "name": "SDL_net headers (vendored)",
+      "license": "zlib",
+      "url": "https://github.com/libsdl-org/SDL_net",
+      "file": "extern/vendored/sdlnet/COPYING"
+    },
+    {
+      "name": "jaffarCommon",
+      "license": "MIT",
+      "url": "https://github.com/SergioMartin86/jaffarCommon",
+      "commit": "{submodule:extern/jaffarCommon}",
+      "file": "extern/jaffarCommon/LICENSE"
+    }
+  ]
+}
