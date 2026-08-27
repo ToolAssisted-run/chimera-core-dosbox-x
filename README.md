@@ -55,7 +55,7 @@ The guest needs a miniBox checkout built with its C++ guest toolchain
 ```
 ./waterbox/setup-guest.sh [-m <miniBox>] # generates the cross file
 ninja -C build/meson-guest               # core.wbx
-./waterbox/build-package.sh              # -> <chimera>/build/Cores/dosbox-x.zip
+./waterbox/build-package.sh              # -> <chimera>/build/Cores/dosbox-x.chimeraCore
 ./waterbox/run-gate.sh                   # the equivalence gate
 ```
 

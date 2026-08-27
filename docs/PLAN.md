@@ -374,7 +374,7 @@ build/meson-native` produces run-native. Patches overlay at every
       legs, all native==sandbox==rerecord. tests/run-frontend.sh 4/4:
       RAM slice identical to native through the real frontend, preset
       setting arrives, 121+4 keybinds adopted, savedata engine export
-      == sandbox runner. deterministic package -> build/Cores/dosbox-x.zip.
+      == sandbox runner. deterministic package -> build/Cores/dosbox-x.chimeraCore.
 - [~] M6: CD direct-mount DONE (2026-08-25). The BizHawk-era CD layer is
       gone: cdrom_image.cpp rebuilt from pristine upstream (keeping only
       the drive-light hooks and swapping its unity-includes for the

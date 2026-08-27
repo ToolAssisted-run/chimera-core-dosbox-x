@@ -34,7 +34,7 @@ fi
 chimera_root="$(cd "$chimera_root" && pwd)"
 
 emu_exe="$chimera_root/build/Chimera.exe"
-package="$chimera_root/build/Cores/dosbox-x.zip"
+package="$chimera_root/build/Cores/dosbox-x.chimeraCore"
 rn="$root/build/meson-native/run-native"
 rw="$root/build/meson-native/run-wbx"
 core="$root/build/meson-guest/core.wbx"
