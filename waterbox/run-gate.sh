@@ -32,6 +32,10 @@ mkdir -p "$work"
 
 fail=0
 digests() { grep -E '^(videoHash|audioHash|domain\[)'; }
+# What a turbo run can be held to: everything except the whole-run video hash,
+# which a run that skipped the first half cannot possibly match - the second
+# half it did draw is compared instead.
+turboDigests() { grep -E '^(tailVideoHash|audioHash|domain\[)'; }
 
 # ---- the boot leg ----------------------------------------------------------
 # Power-on to the DOS prompt, nothing pressed, settings at their defaults.
@@ -48,6 +52,25 @@ elif [ "$box" != "$rr" ]; then
 	echo "--- plain"; echo "$box"; echo "--- rerecord"; echo "$rr"; fail=1
 else
 	echo "PASS boot ($frames frames, native==sandbox==rerecord)"
+fi
+
+# ---- the turbo leg ---------------------------------------------------------
+# The RENDER layer switched off for the first half of the run and back on for
+# the second. Everything the 8086 can see - and every picture of that second
+# half - must be what it would have been: what turbo skips is the production of
+# pixels, never the VGA's timing.
+# --turbo-settle 1 excuses exactly ONE picture: DOSBox-X redraws a row only when
+# it differs from the last row it drew, so the frame that resumes drawing is the
+# one that rebuilds the whole surface. It converges the very next frame -
+# measured, not assumed - and both runs skip the same frame, so nothing else is
+# excused.
+tnorm="$(timeout 900 "$rw" "$core" --frames "$frames" --turbo-settle 1 2>/dev/null | turboDigests)"
+tturbo="$(timeout 900 "$rw" "$core" --frames "$frames" --turbo --turbo-settle 1 2>/dev/null | turboDigests)"
+if [ -z "$tnorm" ] || [ "$tnorm" != "$tturbo" ]; then
+	echo "FAIL turbo (an undrawn frame changed the machine or the picture after it)"
+	echo "--- drawn"; echo "$tnorm"; echo "--- turbo"; echo "$tturbo"; fail=1
+else
+	echo "PASS turbo ($frames frames, half of them undrawn, same machine and same pictures)"
 fi
 
 # ---- the hdd leg -----------------------------------------------------------

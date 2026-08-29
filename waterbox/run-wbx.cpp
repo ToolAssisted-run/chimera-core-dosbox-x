@@ -6,7 +6,7 @@
 //
 // usage: run-wbx <core.wbx> [--rom FILE] [--preset NAME] [--formatted-hdd N]
 //        [--memsize MB] [--cycles N] [--joysticks] [--frames N] [--type TEXT]
-//        [--rerecord] [--savedata-out DIR]
+//        [--rerecord] [--turbo] [--savedata-out DIR]
 //
 // The typing schedule stays in lockstep with run-native's: one key event
 // phase per frame from frame 140, 2 held + 2 released per character.
@@ -105,6 +105,7 @@ static KBD_KEYS keyForChar(char c, bool *shift)
 typedef int (MB_GUEST_ABI *intfn)(void);
 typedef void (MB_GUEST_ABI *framefn)(uint64_t);
 typedef void (MB_GUEST_ABI *setfn)(int32_t, int32_t);
+typedef void (MB_GUEST_ABI *voidfn_i)(int);
 typedef uintptr_t (MB_GUEST_ABI *ptrfn)(void);
 typedef uintptr_t (MB_GUEST_ABI *ptrfn_i)(int);
 typedef int64_t (MB_GUEST_ABI *i64fn_i)(int);
@@ -160,7 +161,8 @@ int main(int argc, char **argv)
 	std::vector<std::pair<long, int>> swapFd;
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
-	bool rerecord = false, joysticks = false, exercise = false;
+	bool rerecord = false, turbo = false, joysticks = false, exercise = false;
+	long turboSettle = 0;
 	std::vector<std::string> extraSettings; // KEY=VALUE, string or number
 
 	for (int i = 1; i < argc; i++) {
@@ -186,6 +188,8 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--savedata-out") && i + 1 < argc) savedataOut = argv[++i];
 		else if (!strcmp(argv[i], "--dump-video") && i + 1 < argc) dumpPrefix = argv[++i];
 		else if (!strcmp(argv[i], "--rerecord")) rerecord = true;
+		else if (!strcmp(argv[i], "--turbo")) turbo = true;
+		else if (!strcmp(argv[i], "--turbo-settle") && i + 1 < argc) turboSettle = strtol(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
 		else if (!strcmp(argv[i], "--setting") && i + 1 < argc) extraSettings.push_back(argv[++i]);
@@ -282,6 +286,7 @@ int main(int argc, char **argv)
 	}
 
 	framefn FrameAdvance = (framefn)proc(h, "FrameAdvance");
+	voidfn_i SetRenderingEnabled = (voidfn_i)proc(h, "SetRenderingEnabled");
 	setfn SetButton = (setfn)proc(h, "SetButton");
 	setfn SetAxis = (setfn)proc(h, "SetAxis");
 	ptrfn GetVideoBgra = (ptrfn)proc(h, "GetVideoBgra");
@@ -300,6 +305,10 @@ int main(int argc, char **argv)
 	wbx_activate_host(h, &r);
 
 	uint64_t vh = 0, ah = 0;
+	/* the second half of the run, hashed separately: see --turbo */
+	const long tail = frames / 2;
+	const long hashFrom = tail + turboSettle;
+	uint64_t th = 0;
 	membuf st = {0};
 	size_t typePos = 0;
 	int typePhase = 0;
@@ -308,6 +317,10 @@ int main(int argc, char **argv)
 	bool swapHeld = false;
 
 	for (long i = 0; i < frames; i++) {
+		/* turbo: draw nothing for the first half of the run, then draw the
+		 * second half normally - those are the pictures the turbo leg
+		 * compares */
+		if (turbo) SetRenderingEnabled(i >= tail);
 		if (rerecord) {
 			st.len = 0;
 			wbx_save_state(h, mem_write, (uintptr_t)&st, &r);
@@ -388,6 +401,11 @@ int main(int argc, char **argv)
 		int nsamp = GetAudioSampleCount();
 		const void *audio = (const void *)GetAudio();
 		if (video) vh = fnv(vh, video, (size_t)w * hgt * 4);
+		if (video && i >= hashFrom) {
+			th = fnv(th, &w, sizeof w);
+			th = fnv(th, &hgt, sizeof hgt);
+			th = fnv(th, video, (size_t)w * hgt * 4);
+		}
 		ah = fnv(ah, audio, (size_t)nsamp * 4);
 		if (dumpPrefix && video) {
 			char path[1024];
@@ -398,6 +416,7 @@ int main(int argc, char **argv)
 
 	printf("frames=%ld\n", frames);
 	printf("videoHash=%016llx\n", (unsigned long long)vh);
+	printf("tailVideoHash=%016llx\n", (unsigned long long)th);
 	printf("audioHash=%016llx\n", (unsigned long long)ah);
 	int nd = GetMemoryDomainCount();
 	for (int i = 0; i < nd; i++) {

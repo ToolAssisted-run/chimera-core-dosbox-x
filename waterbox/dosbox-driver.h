@@ -101,6 +101,11 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err);
 // One frame: applies inputs, advances the virtual clock by one frame's ticks.
 void dosdrv_frame(const DosDrvInput &input);
 
+// Turbo: while off, the finished surface is not copied out for the frontend.
+// Only that - see the comment on the definition for why DOSBox-X's own
+// disablerender switch cannot be used here.
+void dosdrv_set_rendering(bool on);
+
 // The last frame's picture, BGRA. Size can change with the DOS video mode.
 const uint32_t *dosdrv_video(int *w, int *h);
 // Interleaved stereo s16 samples produced during the last frame.

@@ -288,8 +288,30 @@ static size_t _videoBufferSize = 0;
 static int _videoWidth = 0;
 static int _videoHeight = 0;
 
+// Turbo. DOSBox-X has its own render kill switch - render.disablerender, the
+// one behind its headless mode - and it is NOT usable here: switching it on
+// mid-run leaves the machine somewhere else (measured, on the boot leg:
+// conventional memory and physical RAM both diverge). The RENDER layer is
+// wired into the VGA's event scheduling, so refusing a frame is a decision the
+// emulated hardware notices. What is left, and is certainly safe, is the copy
+// out: the finished surface never reaches this core's frame buffer.
+static bool _render = true;
+
+void dosdrv_set_rendering(bool on)
+{
+	// Coming back, ask the RENDER layer to treat every line as changed. It
+	// skips a row whose bytes match the last one it drew, and while turbo was
+	// on it drew none - so without this the frontend would keep showing the
+	// picture from before the gap until something on screen happened to move.
+	// It is renderer bookkeeping, not machine state: the gate's turbo leg
+	// compares every memory domain and finds them identical.
+	if (on && !_render) render.scale.clearCache = true;
+	_render = on;
+}
+
 void doRenderUpdateCallback()
 {
+	if (!_render) return;
 	bool allocateBuffer = false;
 	if (sdl.surface->w != _videoWidth) { allocateBuffer = true; _videoWidth = sdl.surface->w; }
 	if (sdl.surface->h != _videoHeight) { allocateBuffer = true; _videoHeight = sdl.surface->h; }

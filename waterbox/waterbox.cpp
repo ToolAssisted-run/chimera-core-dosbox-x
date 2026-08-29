@@ -54,6 +54,15 @@ static uint32_t g_videoOut[VID_MAX_W * VID_MAX_H];
 static int g_vidW = 720, g_vidH = 400; // the text mode every machine boots in
 static bool g_videoValid = false;      // no frame rendered yet
 
+/* Turbo. The host sets this to 0 when nobody is going to look at the frame, and
+ * DOSBox-X's RENDER layer stops producing pixels; the VGA is timed exactly as
+ * before. ECL_INVISIBLE because it is the frontend's policy for the moment, not
+ * part of the machine: a state saved while fast-forwarding must not put the
+ * machine back into it when it is loaded to be looked at. The RENDER layer's own
+ * copy of the flag IS inside the savestate, which is why the export writes
+ * both and the engine re-sends after every load. */
+ECL_INVISIBLE static int g_render = 1;
+
 static void refreshVideo(void)
 {
 	int w = 0, h = 0;
@@ -425,11 +434,23 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 	g_input.mouse.leftReleased = g_input.mouse.middleReleased = g_input.mouse.rightReleased = 0;
 
 	dosdrv_frame(in);
-	refreshVideo();
+	// Turbo: RENDER produced nothing, so there is nothing to copy and the
+	// buffer keeps the last frame that was drawn.
+	if (g_render) refreshVideo();
 }
 
 // null until the first rendered frame - the reference runner skips unrendered
 // frames in its digest and the sandbox must look identical
+/* Turbo (optional guest ABI group): while off the core must produce no picture
+ * and must otherwise be exactly the machine it would have been. run-gate.sh's
+ * turbo leg is the proof - half a run undrawn leaves the same machine, and the
+ * same pictures once drawing resumes. */
+ECL_EXPORT void SetRenderingEnabled(int on)
+{
+	g_render = on != 0;
+	dosdrv_set_rendering(g_render != 0);
+}
+
 ECL_EXPORT uint32_t *GetVideoBgra(void) { return g_videoValid ? g_videoOut : nullptr; }
 ECL_EXPORT int GetVideoWidth(void) { return g_vidW; }
 ECL_EXPORT int GetVideoHeight(void) { return g_vidH; }
