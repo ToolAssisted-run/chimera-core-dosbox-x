@@ -34,7 +34,7 @@
 #define FLAGS1	((iso) ? de.fileFlags : de.timeZone)
 #define FLAGS2	((iso) ? de->fileFlags : de->timeZone)
 
-extern bool _driveUsed;
+extern bool _cdDriveUsed;
 #if !defined(OSFREE)
 char fullname[LFN_NAMELENGTH];
 static uint16_t sdid[256];
@@ -1885,7 +1885,7 @@ bool isoDrive::ReadCachedSector(uint8_t** buffer, const uint32_t sector) {
 #endif
 
 inline bool isoDrive :: readSector(uint8_t *buffer, uint32_t sector) const {
-    _driveUsed = true;
+    _cdDriveUsed = true;
     if(cdrom == nullptr) return false;
     return cdrom->ReadSectorsHost(buffer, false, sector, 1);
 }

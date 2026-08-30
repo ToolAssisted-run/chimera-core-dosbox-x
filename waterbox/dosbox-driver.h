@@ -117,7 +117,11 @@ uint32_t dosdrv_ticks_elapsed();
 // The DOS video mode's own refresh rate, as reported by the VGA emulation.
 void dosdrv_refresh_rate(int *numerator, int *denominator);
 // Whether any drive I/O happened during the last frame (the drive light).
-bool dosdrv_drive_activity();
+/* Whether that kind of drive was read or written during the frame just run.
+   One per medium, because a machine with a disc AND a hard disk has two lights
+   and they mean different things. */
+bool dosdrv_cd_activity();
+bool dosdrv_disk_activity();
 // Nonzero while dosbox reads input this frame - the lag-frame signal.
 bool dosdrv_input_was_read();
 

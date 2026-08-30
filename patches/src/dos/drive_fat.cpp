@@ -77,7 +77,7 @@
 #define FAT32                   2
 #endif
 
-extern bool _driveUsed;
+extern bool _diskDriveUsed;
 
 static uint16_t dpos[256];
 static uint32_t dnum[256];
@@ -441,7 +441,7 @@ void fatFile::Flush(void) {
 
 #if !defined(OSFREE)
 bool fatFile::Read(uint8_t * data, uint16_t *size) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	if ((this->flags & 0xf) == OPEN_WRITE) {	// check if file opened in write-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
 		return false;
@@ -497,7 +497,7 @@ bool fatFile::Read(uint8_t * data, uint16_t *size) {
 
 #if !defined(OSFREE)
 bool fatFile::Write(const uint8_t * data, uint16_t *size) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	if ((this->flags & 0xf) == OPEN_READ) {	// check if file opened in read-only mode
 		DOS_SetError(DOSERR_ACCESS_DENIED);
 		return false;
@@ -646,7 +646,7 @@ finalizeWrite:
 
 #if !defined(OSFREE)
 bool fatFile::Seek(uint32_t *pos, uint32_t type) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	int32_t seekto=0;
 	
 	switch(type) {
@@ -684,7 +684,7 @@ bool fatFile::Close() {
 	//TODO
 	file_ccm = fatDrive::clusterChainMemory();
 
-	_driveUsed = true;
+	_diskDriveUsed = true;
 	/* Flush buffer */
 	if (loadedSector) myDrive->writeSector(currentSector, sectorBuffer);
 
@@ -932,7 +932,7 @@ void fatDrive::UpdateBootVolumeLabel(const char *label) {
 }
 
 void fatDrive::SetLabel(const char *label, bool /*iscdrom*/, bool /*updatable*/) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	if (unformatted) return;
 
 	direntry sectbuf[MAX_DIRENTS_PER_SECTOR]; /* 16 directory entries per 512 byte sector */
@@ -1181,7 +1181,7 @@ bool fatDrive::getDirClustNum(const char *dir, uint32_t *clustNum, bool parDir) 
    (instead of fatDrive's, which can differ), VHD access works fine, and
    RAW images keep working.  2023.05.11 - maxpat78 */
 uint8_t fatDrive::readSector(uint32_t sectnum, void * data) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	if (absolute) return Read_AbsoluteSector(sectnum, data);
     assert(!IS_PC98_ARCH);
 #ifdef OLD_CHS_CONVERSION
@@ -1201,7 +1201,7 @@ uint8_t fatDrive::readSector(uint32_t sectnum, void * data) {
 }	
 
 uint8_t fatDrive::writeSector(uint32_t sectnum, void * data) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
 	if (absolute) return Write_AbsoluteSector(sectnum, data);
     assert(!IS_PC98_ARCH);
 #ifdef OLD_CHS_CONVERSION
@@ -1653,7 +1653,7 @@ fatDrive::fatDrive(imageDisk *sourceLoadedDisk, std::vector<std::string> &option
 }
 
 uint8_t fatDrive::Read_AbsoluteSector(uint32_t sectnum, void * data) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
     if (loadedDisk != NULL) {
         /* this will only work if the logical sector size is larger than the disk sector size */
         const unsigned int lsz = loadedDisk->getSectSize();
@@ -1677,7 +1677,7 @@ uint8_t fatDrive::Read_AbsoluteSector(uint32_t sectnum, void * data) {
 }
 
 uint8_t fatDrive::Write_AbsoluteSector(uint32_t sectnum, void * data) {
-    _driveUsed = true;
+    _diskDriveUsed = true;
     if (loadedDisk != NULL) {
         /* this will only work if the logical sector size is larger than the disk sector size */
         const unsigned int lsz = loadedDisk->getSectSize();

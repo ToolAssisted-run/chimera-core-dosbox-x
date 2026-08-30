@@ -22,6 +22,29 @@
 #include "waterbox-input.h"
 
 static char g_loadError[512];
+
+/* ---- drive lights (an optional guest ABI group) ----
+ *
+ * One light per KIND OF MEDIA this machine actually has, lit on any frame the
+ * drive was read or written. A machine with a disc and a hard disk has two of
+ * them and they mean different things - "the CD spun" and "the disk was
+ * touched" are separate facts, and a single light that meant either would say
+ * less than nothing while a game streams from CD.
+ *
+ * Declared from what the PROJECT mounted rather than from what DOSBox-X could
+ * in principle emulate: a light for a drive nobody put anything in is a light
+ * that never comes on, which is worse than no light at all. */
+static struct { const char *name; bool (*lit)(void); } g_driveLights[2];
+static int g_driveLightCount;
+
+static void registerDriveLights(bool haveDisk, bool haveCd)
+{
+	g_driveLightCount = 0;
+	if (haveDisk) g_driveLights[g_driveLightCount++] = { "Hard Disk", dosdrv_disk_activity };
+	if (haveCd) g_driveLights[g_driveLightCount++] = { "CD-ROM", dosdrv_cd_activity };
+}
+
+
 static bool g_inited;
 static WbxInput g_input;
 
@@ -310,6 +333,9 @@ ECL_EXPORT int Init(void)
 
 	cfg.confText = dosdrv_compose_conf(m);
 
+	// which lights this machine has: the media the project actually mounted
+	registerDriveLights(m.hddMounted, !m.cdImages.empty());
+
 	std::string err;
 	if (!dosdrv_boot(cfg, &err)) {
 		snprintf(g_loadError, sizeof g_loadError, "%s", err.c_str());
@@ -485,7 +511,17 @@ ECL_EXPORT int GetVsyncDenominator(void)
 }
 
 ECL_EXPORT uint32_t GetTicksElapsed(void) { return dosdrv_ticks_elapsed(); }
-ECL_EXPORT int GetDriveActivityFlag(void) { return dosdrv_drive_activity() ? 1 : 0; }
+ECL_EXPORT int32_t GetDriveCount(void) { return g_driveLightCount; }
+
+ECL_EXPORT const char *GetDriveName(int32_t i)
+{
+	return i >= 0 && i < g_driveLightCount ? g_driveLights[i].name : nullptr;
+}
+
+ECL_EXPORT int32_t GetDriveLight(int32_t i)
+{
+	return i >= 0 && i < g_driveLightCount && g_driveLights[i].lit() ? 1 : 0;
+}
 
 // ---- memory domains ----
 

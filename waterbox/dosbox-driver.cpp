@@ -78,8 +78,14 @@ extern bool user_cursor_locked;
 #define MOUSE_MAX_X 800
 #define MOUSE_MAX_Y 600
 
-// ---- drive activity (fat/iso drives set this; the drive light reads it) ---
-bool _driveUsed = false;
+// ---- drive activity, one flag per KIND OF MEDIA ---------------------------
+// Set wherever a sector is actually read or written - the CD emulation in
+// cdrom_image.cpp and drive_iso.cpp, the disk emulation in bios_disk.cpp,
+// drive_fat.cpp and bios_vhd.cpp - and cleared at the top of every frame, so
+// what the frontend reads is "was this drive touched during the frame just
+// run" and nothing longer-lived than that.
+bool _cdDriveUsed = false;
+bool _diskDriveUsed = false;
 
 // ---- configuration composition ---------------------------------------------
 
@@ -336,7 +342,8 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 
 void dosdrv_frame(const DosDrvInput &f)
 {
-	_driveUsed = false;
+	_cdDriveUsed = false;
+	_diskDriveUsed = false;
 
 	// Keyboard: diff against the previous frame into press/release sets
 	_releasedKeys.clear();
@@ -444,7 +451,8 @@ void dosdrv_refresh_rate(int *numerator, int *denominator)
 	if (denominator) *denominator = _refreshRateDenominator;
 }
 
-bool dosdrv_drive_activity() { return _driveUsed; }
+bool dosdrv_cd_activity() { return _cdDriveUsed; }
+bool dosdrv_disk_activity() { return _diskDriveUsed; }
 bool dosdrv_input_was_read() { return true; } // no lag concept yet (as in BizHawk)
 
 // ---- memory domains -------------------------------------------------------
