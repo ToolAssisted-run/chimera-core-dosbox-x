@@ -276,16 +276,37 @@ void dosdrv_set_rendering(bool on)
 void doRenderUpdateCallback()
 {
 	if (!_render) return;
-	bool allocateBuffer = false;
-	if (sdl.surface->w != _videoWidth) { allocateBuffer = true; _videoWidth = sdl.surface->w; }
-	if (sdl.surface->h != _videoHeight) { allocateBuffer = true; _videoHeight = sdl.surface->h; }
+	if (sdl.surface == nullptr || sdl.surface->pixels == nullptr) return;
 
-	_videoBufferSize = (size_t)_videoWidth * _videoHeight * sizeof(uint32_t);
+	const int w = sdl.surface->w, h = sdl.surface->h;
+	if (w <= 0 || h <= 0) return;
+
+	// A ROW IS AS LONG AS THE SURFACE SAYS IT IS. This used to copy w*h*4 bytes
+	// straight out of surface->pixels, which assumes the pitch is exactly w*4
+	// and the surface is 32 bits deep. When the pitch is LARGER that reads the
+	// wrong bytes into every row after the first; when it is SMALLER - which is
+	// what a surface of any other depth would give - it reads past the end of
+	// the surface entirely, and a read that leaves the guest's own memory is
+	// the one kind of fault a sandbox cannot contain.
+	const size_t rowBytes = (size_t)w * sizeof(uint32_t);
+	const size_t pitch = (size_t)sdl.surface->pitch;
+	if (pitch < rowBytes) return;   // not 32 bits deep: nothing safe to copy
+
+	bool allocateBuffer = false;
+	if (w != _videoWidth) { allocateBuffer = true; _videoWidth = w; }
+	if (h != _videoHeight) { allocateBuffer = true; _videoHeight = h; }
+
+	_videoBufferSize = rowBytes * (size_t)h;
 	if (allocateBuffer) {
 		if (_videoBuffer != nullptr) free(_videoBuffer);
 		_videoBuffer = (uint32_t *)malloc(_videoBufferSize);
 	}
-	memcpy(_videoBuffer, sdl.surface->pixels, _videoBufferSize);
+	// a mode too big for the guest's heap is a black frame, not a write to null
+	if (_videoBuffer == nullptr) { _videoWidth = _videoHeight = 0; _videoBufferSize = 0; return; }
+
+	const uint8_t *src = (const uint8_t *)sdl.surface->pixels;
+	uint8_t *dst = (uint8_t *)_videoBuffer;
+	for (int y = 0; y < h; y++) memcpy(dst + (size_t)y * rowBytes, src + (size_t)y * pitch, rowBytes);
 }
 
 // ---- driver state ---------------------------------------------------------
