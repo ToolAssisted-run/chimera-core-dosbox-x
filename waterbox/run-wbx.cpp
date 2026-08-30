@@ -204,7 +204,12 @@ int main(int argc, char **argv)
 	FILE *wf = fopen(wbxPath, "rb");
 	if (!wf) { fprintf(stderr, "cannot open %s\n", wbxPath); return 1; }
 
-	mb_memory_layout_template layout = { 256u << 20, 16u << 20, 16u << 20, 64u << 20, 1024u << 20 };
+	// THE PACKAGE'S LAYOUT, copied. waterbox.config's memoryLayoutMiB is what
+	// Chimera gives the guest; this runner builds its own host and so has to
+	// say the same thing, or the gate proves a machine nobody runs. The mmap
+	// arena is the one that matters here: the whole writable hard disk lives in
+	// it, and the largest this package offers is 2014mb.
+	mb_memory_layout_template layout = { 256u << 20, 16u << 20, 16u << 20, 64u << 20, 3072u << 20 };
 	freader fr = { wf };
 	mb_return r;
 	wbx_create_host(&layout, "core.wbx", file_read, (uintptr_t)&fr, &r);

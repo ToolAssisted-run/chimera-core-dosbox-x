@@ -391,4 +391,23 @@ else
 	echo "PASS slots ($swapframes frames, mixed floppies+CD by canonical names via the slot map, native==sandbox==rerecord)"
 fi
 
+# ---- the biggest disk this package OFFERS must be one it can mount ---------
+# The writable drive C: is a memory file: a sandbox has nowhere to put a real
+# one, and a movie needs the disk to be part of the machine. So the guest's mmap
+# arena has to be big enough for whatever formattedHardDisk is set to - and it
+# was not. The arena was 1024 MiB and the largest option is 2014mb, so that
+# option had never once worked; it failed with "could not create the hard disk
+# drive mem file", which is the resize failing one line further up.
+#
+# Every size the package offers is mounted here, largest first, because the one
+# nobody tests is the one that is broken.
+for size in 2014mb 504mb 241mb 41mb 21mb; do
+	if timeout 900 "$rw" "$core" --formatted-hdd "$size" --frames 3 >"$work/hddsize.txt" 2>&1; then
+		echo "PASS hddsize:$size (mounted and booted)"
+	else
+		echo "FAIL hddsize:$size ($(grep -iE 'could not|failed' "$work/hddsize.txt" | head -1))"
+		fail=1
+	fi
+done
+
 exit $fail
