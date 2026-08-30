@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 	// say the same thing, or the gate proves a machine nobody runs. The mmap
 	// arena is the one that matters here: the whole writable hard disk lives in
 	// it, and the largest this package offers is 2014mb.
-	mb_memory_layout_template layout = { 256u << 20, 16u << 20, 16u << 20, 64u << 20, 3072u << 20 };
+	mb_memory_layout_template layout = { 256u << 20, 16u << 20, 16u << 20, 64u << 20, 3456ull << 20 };
 	freader fr = { wf };
 	mb_return r;
 	wbx_create_host(&layout, "core.wbx", file_read, (uintptr_t)&fr, &r);
