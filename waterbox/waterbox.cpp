@@ -521,13 +521,42 @@ ECL_EXPORT int GetMemoryDomainWritable(int i)
 
 // ---- savedata export (the sixth optional guest ABI group) ----
 // The writable hard disk image is this core's save data (chimera
-// docs/save-data.md): it lives in guest memory (the sealed baseline carries
-// the seed; savestates only the dirtied pages), and this group is the user's
-// way OUT - one file, the whole image.
+// docs/save-data.md), and what comes out is THE WHOLE DISK: a complete image,
+// byte for byte what drive C: looks like now, which can be handed straight back
+// to the hdd slot of another project and booted.
+//
+// It is served a WINDOW AT A TIME (ReadSaveDataFile + GetSaveDataScratch)
+// rather than as one pointer, because the disk deliberately does not live in
+// guest memory any more - the base is read from the host and only written
+// chunks are held (see waterbox/sparse-disk.h). There is no address at which
+// the whole 2 GB exists, so there is no pointer to return; the file is
+// reassembled here as the host asks for it, base and overlay together, in
+// order. GetSaveDataFileBuffer stays for the shape of the group and answers
+// null, which is what tells a reader to use the window instead.
+
+// One window. 256 KiB is four of the disk's chunks: big enough that a 2 GB
+// export is eight thousand calls rather than four million, small enough to
+// cost nothing when the machine has no hard disk at all.
+#define SAVEDATA_WINDOW (256 * 1024)
+static uint8_t g_saveDataWindow[SAVEDATA_WINDOW];
 
 ECL_EXPORT int32_t GetSaveDataFileCount(void) { return dosdrv_hdd_size() != 0 ? 1 : 0; }
 ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i == 0 ? "HardDiskDrive.img" : nullptr; }
 ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { return i == 0 ? (int64_t)dosdrv_hdd_size() : 0; }
-ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { return i == 0 ? dosdrv_hdd_buffer() : nullptr; }
+ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { (void)i; return nullptr; }
+
+ECL_EXPORT const uint8_t *GetSaveDataScratch(void) { return g_saveDataWindow; }
+
+ECL_EXPORT int64_t ReadSaveDataFile(int32_t i, int64_t offset, int64_t len)
+{
+	if (i != 0 || offset < 0 || len <= 0) return 0;
+	const uint64_t size = dosdrv_hdd_size();
+	if (size == 0 || (uint64_t)offset >= size) return 0;
+	uint64_t want = (uint64_t)len;
+	if (want > size - (uint64_t)offset) want = size - (uint64_t)offset;
+	if (want > SAVEDATA_WINDOW) want = SAVEDATA_WINDOW;
+	if (!dosdrv_hdd_read((uint64_t)offset, g_saveDataWindow, (size_t)want)) return 0;
+	return (int64_t)want;
+}
 
 }  // extern "C"

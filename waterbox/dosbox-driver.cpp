@@ -15,6 +15,8 @@
 
 #include <jaffarCommon/file.hpp>
 
+#include "sparse-disk.h"
+
 #include "dosbox_conf_assets.h" // generated: conf presets + formatted disk heads
 #include <zstd.h>
 
@@ -55,8 +57,12 @@ void _Delay(uint32_t ticks)
 int _refreshRateNumerator = 0;
 int _refreshRateDenominator = 0;
 
-// ---- the in-guest file directory (the writable HDD lives here) ------------
+// ---- the in-guest file directory (floppies and CDs live here) -------------
 jaffarCommon::file::MemoryFileDirectory _memFileDirectory;
+
+// ---- the writable hard disk, which does NOT (see sparse-disk.h) -----------
+SparseDisk _sparseHardDisk;
+std::string _sparseHardDiskName;
 
 // ---- audio: the mixer tees its converted output here ----------------------
 std::vector<int16_t> _audioSamples;
@@ -180,72 +186,29 @@ uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, siz
 #define FAT_SECTOR_SIZE 512
 static constexpr char writableHDDDstFile[] = "HardDiskDrive.img";
 
-static bool loadFileIntoMemoryFile(const std::string &srcFile, const std::string &dstFile, const ssize_t dstSize = -1)
+// The hard disk, seeded from a file the project mounted. Nothing is copied:
+// the image stays on the host and is read a chunk at a time as the machine
+// asks for it, and only WRITTEN chunks are held in guest memory. That is what
+// lets a disk be larger than the sandbox and what keeps a savestate to the size
+// of what changed rather than the size of the disk.
+static bool openHardDiskFromFile(const std::string &srcFile, uint64_t size)
 {
-	auto srcFilePtr = fopen(srcFile.c_str(), "r");
-	if (srcFilePtr == nullptr) { fprintf(stderr, "Could not find/read from file: %s\n", srcFile.c_str()); return false; }
-
-	fseek(srcFilePtr, 0L, SEEK_END);
-	long srcFileSize = ftell(srcFilePtr);
-	fseek(srcFilePtr, 0L, SEEK_SET);
-
-	const auto dstFileSize = std::max(dstSize, (ssize_t)srcFileSize);
-
-	// If size is not divisible by the sector size, it's a bad image
-	if (dstFileSize % FAT_SECTOR_SIZE > 0) {
-		fprintf(stderr, "Destination file has a non-sector (%d) divisible size: %ld\n", FAT_SECTOR_SIZE, (long)dstFileSize);
-		fclose(srcFilePtr);
+	if (size % FAT_SECTOR_SIZE > 0) {
+		fprintf(stderr, "Hard disk image has a non-sector (%d) divisible size: %llu\n",
+			FAT_SECTOR_SIZE, (unsigned long long)size);
 		return false;
 	}
-
-	auto dstFilePtr = _memFileDirectory.fopen(dstFile, "w");
-	if (dstFilePtr == NULL) {
-		fprintf(stderr, "Could not open mem file for write: %s\n", dstFile.c_str());
-		fclose(srcFilePtr);
+	if (!_sparseHardDisk.openFile(srcFile, size)) {
+		fprintf(stderr, "Could not open hard disk image: %s\n", srcFile.c_str());
 		return false;
 	}
-
-	if (dstFilePtr->resize(dstFileSize) != 0) {
-		fprintf(stderr, "Could not resize mem file: %s to %ld bytes\n", dstFile.c_str(), (long)dstFileSize);
-		_memFileDirectory.fclose(dstFilePtr);
-		fclose(srcFilePtr);
-		return false;
-	}
-
-	setbuf(srcFilePtr, NULL);
-
-	// Copy in sector-sized chunks
-	uint8_t readBuffer[FAT_SECTOR_SIZE];
-	size_t totalChunks = (size_t)srcFileSize / FAT_SECTOR_SIZE;
-	for (size_t chunkId = 0; chunkId < totalChunks; chunkId++) {
-		auto readBytes = fread(readBuffer, 1, FAT_SECTOR_SIZE, srcFilePtr);
-		auto writtenBytes = jaffarCommon::file::MemoryFile::fwrite(readBuffer, 1, FAT_SECTOR_SIZE, dstFilePtr);
-		if (readBytes != (size_t)writtenBytes) {
-			fprintf(stderr, "Could not write data into mem file: %s\n", dstFile.c_str());
-			_memFileDirectory.fclose(dstFilePtr);
-			fclose(srcFilePtr);
-			return false;
-		}
-	}
-	auto remainder = (size_t)srcFileSize % FAT_SECTOR_SIZE;
-	if (remainder > 0) {
-		auto readBytes = fread(readBuffer, 1, remainder, srcFilePtr);
-		auto writtenBytes = jaffarCommon::file::MemoryFile::fwrite(readBuffer, 1, remainder, dstFilePtr);
-		if (readBytes != (size_t)writtenBytes) {
-			fprintf(stderr, "Could not write data into mem file: %s\n", dstFile.c_str());
-			_memFileDirectory.fclose(dstFilePtr);
-			fclose(srcFilePtr);
-			return false;
-		}
-	}
-
-	_memFileDirectory.fclose(dstFilePtr);
-	fclose(srcFilePtr);
+	_sparseHardDiskName = writableHDDDstFile;
 	return true;
 }
 
-// Seeds the HDD memory file from an in-memory zstd head, grown to dstSize.
-static bool loadZstIntoMemoryFile(const uint8_t *zst, size_t zstLen, const std::string &dstFile, uint64_t dstSize)
+// ...and one of the package's own formatted disks, which is a small
+// decompressed head and then zeros all the way down. The zeros are not stored.
+static bool openHardDiskFromZst(const uint8_t *zst, size_t zstLen, uint64_t dstSize)
 {
 	if (dstSize % FAT_SECTOR_SIZE != 0) {
 		fprintf(stderr, "formatted disk size not sector divisible: %llu\n", (unsigned long long)dstSize);
@@ -262,24 +225,19 @@ static bool loadZstIntoMemoryFile(const uint8_t *zst, size_t zstLen, const std::
 		fprintf(stderr, "formatted disk head failed to decompress\n");
 		return false;
 	}
-	auto dst = _memFileDirectory.fopen(dstFile, "w");
-	if (dst == NULL) return false;
-	if (dst->resize((ssize_t)dstSize) != 0) { _memFileDirectory.fclose(dst); return false; }
-	auto written = jaffarCommon::file::MemoryFile::fwrite(head.data(), 1, head.size(), dst);
-	_memFileDirectory.fclose(dst);
-	return (size_t)written == head.size();
+	_sparseHardDisk.openHead(std::move(head), dstSize);
+	_sparseHardDiskName = writableHDDDstFile;
+	return true;
 }
 
-uint8_t *dosdrv_hdd_buffer()
+uint64_t dosdrv_hdd_size() { return _sparseHardDisk.size(); }
+
+// The disk as it stands: base where nothing was written, overlay where it was.
+// This is what an export is made of, and it is the same answer the machine gets
+// when it reads a sector.
+bool dosdrv_hdd_read(uint64_t offset, void *dst, size_t len)
 {
-	if (!_memFileDirectory.contains(writableHDDDstFile)) return nullptr;
-	return _memFileDirectory.getFileBuffer(writableHDDDstFile);
-}
-uint64_t dosdrv_hdd_size()
-{
-	// getFileSize is -1 for an absent file; no HDD means size 0 here
-	if (!_memFileDirectory.contains(writableHDDDstFile)) return 0;
-	return (uint64_t)_memFileDirectory.getFileSize(writableHDDDstFile);
+	return _sparseHardDisk.isOpen() && _sparseHardDisk.read(offset, dst, len);
 }
 
 // ---- video: copied on demand when the render path says so -----------------
@@ -336,17 +294,16 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 	} else {
 		bool result;
 		if (!cfg.hddSeedFile.empty()) {
-			printf("Creating hard disk drive mem file '%s' -> '%s' (%llu bytes)\n",
+			printf("Hard disk '%s' as '%s' (%llu bytes), read on demand\n",
 				cfg.hddSeedFile.c_str(), writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
-			result = loadFileIntoMemoryFile(cfg.hddSeedFile, writableHDDDstFile, (ssize_t)cfg.writableHDDImageSize);
+			result = openHardDiskFromFile(cfg.hddSeedFile, cfg.writableHDDImageSize);
 		} else {
-			printf("Creating formatted hard disk drive mem file '%s' (%llu bytes)\n",
+			printf("Formatted hard disk '%s' (%llu bytes), zeros not stored\n",
 				writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
-			result = loadZstIntoMemoryFile(cfg.hddSeedZst, cfg.hddSeedZstLen,
-				writableHDDDstFile, cfg.writableHDDImageSize);
+			result = openHardDiskFromZst(cfg.hddSeedZst, cfg.hddSeedZstLen, cfg.writableHDDImageSize);
 		}
-		if (!result || !_memFileDirectory.contains(writableHDDDstFile)) {
-			if (err) *err = "could not create the hard disk drive mem file";
+		if (!result || !_sparseHardDisk.isOpen()) {
+			if (err) *err = "could not open the hard disk drive image";
 			return false;
 		}
 	}
@@ -513,10 +470,11 @@ bool dosdrv_domain(int index, const char **name, uint8_t **data, uint64_t *size,
 	}
 	else if (index == i++) { dn = "Physical RAM"; dd = MemBase; ds = MemSize; }
 	else if (index == i++) { dn = "Video RAM"; dd = vga.mem.linear; ds = vga.mem.memsize; }
-	else if (index == i++) {
-		if (dosdrv_hdd_size() == 0) return false;
-		dn = "Hard Disk Drive"; dd = dosdrv_hdd_buffer(); ds = dosdrv_hdd_size();
-	}
+	/* The hard disk is NOT a memory domain any more, and cannot be: it does
+	 * not live in guest memory, so there is no address to hand over (see
+	 * waterbox/sparse-disk.h). It was only ever a domain because it happened
+	 * to be a buffer - a disk image is not the machine's memory, and what a
+	 * person wants from it is the EXPORT, which is a whole mountable image. */
 	else return false;
 
 	if (name) *name = dn;

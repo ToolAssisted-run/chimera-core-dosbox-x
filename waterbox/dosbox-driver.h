@@ -128,5 +128,9 @@ bool dosdrv_input_was_read();
 bool dosdrv_domain(int index, const char **name, uint8_t **data, uint64_t *size, bool *writable);
 
 // The writable hard disk image (the savedata export): NULL/0 when none.
-uint8_t *dosdrv_hdd_buffer();
+// The writable hard disk. There is no buffer to hand over: the base is read
+// from the host and only written chunks are in guest memory (sparse-disk.h),
+// so the image is READ rather than pointed at - which is also what the
+// save-data export does to produce a whole mountable .hdd.
 uint64_t dosdrv_hdd_size();
+bool dosdrv_hdd_read(uint64_t offset, void *dst, size_t len);

@@ -4508,3 +4508,69 @@ imageDiskINT13Drive::~imageDiskINT13Drive() {
  {
     _memFileDirectory.fclose(_memfile);
  }
+
+ // ---- the sparse hard disk -------------------------------------------------
+ // Same shape as imageDisk_Mem, and simpler: every read and write is one call
+ // into SparseDisk, which decides for itself whether the answer is on the host
+ // or in the overlay. Nothing here knows or cares which.
+
+ imageDisk_Sparse::imageDisk_Sparse(SparseDisk* disk, const char* imgName, uint32_t imgSizeK)
+ {
+     diskSizeK = imgSizeK;
+     _sparse = disk;
+     image_length = ((uint64_t)imgSizeK * 1024);
+     if (imgName != NULL) diskname = imgName;
+     active = false;
+     hardDrive = true;   // this is only ever drive C:
+     sector_size = 512;
+     heads = 0; cylinders = 0; sectors = 0;
+     Set_GeometryForHardDisk();
+ }
+
+ imageDisk_Sparse::~imageDisk_Sparse() { }
+
+ uint8_t imageDisk_Sparse::Read_AbsoluteSector(uint32_t sectnum, void * data)
+ {
+     const uint64_t bytenum = (uint64_t)sectnum * (uint64_t)sector_size;
+     if ((bytenum + sector_size) > this->image_length) {
+         LOG_MSG("Attempt to read invalid sector in Read_AbsoluteSector for sector %lu.\n", (unsigned long)sectnum);
+         return 0x05;
+     }
+     if (!_sparse->read(bytenum + image_base, data, sector_size)) return 0x05;
+     _driveUsed = true;
+     return 0x00;
+ }
+
+ uint8_t imageDisk_Sparse::Write_AbsoluteSector(uint32_t sectnum, const void * data)
+ {
+     const uint64_t bytenum = (uint64_t)sectnum * (uint64_t)sector_size;
+     if ((bytenum + sector_size) > this->image_length) {
+         LOG_MSG("Attempt to write invalid sector in Write_AbsoluteSector for sector %lu.\n", (unsigned long)sectnum);
+         return 0x05;
+     }
+     if (!_sparse->write(bytenum + image_base, data, sector_size)) return 0x05;
+     _driveUsed = true;
+     return 0x00;
+ }
+
+ void imageDisk_Sparse::Set_GeometryForHardDisk()
+ {
+     sector_size = 512;
+     partTable mbrData;
+     for (int m = (Read_AbsoluteSector(0, &mbrData) ? 0 : 4); m--;)
+     {
+         if(!mbrData.pentry[m].partSize) continue;
+         bootstrap bootbuffer;
+         if (Read_AbsoluteSector(mbrData.pentry[m].absSectStart, &bootbuffer)) continue;
+         bootbuffer.sectorspertrack = var_read(&bootbuffer.sectorspertrack);
+         bootbuffer.headcount = var_read(&bootbuffer.headcount);
+         uint32_t setSect = bootbuffer.sectorspertrack;
+         uint32_t setHeads = bootbuffer.headcount;
+         uint32_t setCyl = (mbrData.pentry[m].absSectStart + mbrData.pentry[m].partSize) / (setSect * setHeads);
+         Set_Geometry(setHeads, setCyl, setSect, 512);
+         return;
+     }
+     // no partition table worth reading: the same fallback geometry the memory
+     // file path uses, from the image's own size
+     Set_Geometry(16, (uint32_t)(_sparse->size() / (512 * 63 * 16)), 63, 512);
+ }

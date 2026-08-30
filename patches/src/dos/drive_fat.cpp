@@ -1517,9 +1517,20 @@ fatDrive::fatDrive(const char* sysFilename, uint32_t bytesector, uint32_t cylsec
 	const char *fname = readonly ? sysFilename + 1 : sysFilename;
 	FILE *diskfile = fopen_lock(fname, readonly || roflag ? "rb" : "rb+", readonly);
 	if (!diskfile) {
-		/* wbx: not a real file - try the in-guest memory file directory (the
-		 * writable hard disk image lives there; always opened read-write) */
+		/* wbx: not a real file. The writable HARD DISK comes first: it is not
+		 * a memory file at all - its base is read from the host as the machine
+		 * asks for it and only written chunks are held (sparse-disk.h), which is
+		 * what lets it be larger than the sandbox itself. */
 		readonly = false;
+		if (_sparseHardDisk.isOpen() && _sparseHardDiskName == fname) {
+			const uint32_t sparseSizeK = (uint32_t)(_sparseHardDisk.size() / 1024ULL);
+			loadedDisk = new imageDisk_Sparse(&_sparseHardDisk, fname, sparseSizeK);
+			fatDriveInit(sysFilename, bytesector, cylsector, headscyl, cylinders, sparseSizeK, options);
+			return;
+		}
+
+		/* everything else - floppies, CD images - still lives in the in-guest
+		 * memory file directory, where being small is not a problem */
 		jaffarCommon::file::MemoryFile *memfile = _memFileDirectory.fopen(fname, "rb+");
 		if (memfile == NULL) { created_successfully = false; return; }
 

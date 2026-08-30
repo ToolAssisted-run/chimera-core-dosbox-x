@@ -87,14 +87,17 @@ box="$(timeout 1200 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 	--type "$typed" --savedata-out "$work/sd-box" 2>/dev/null | digests)"
 rr="$(timeout 3600 "$rw" "$core" --formatted-hdd 21mb --frames "$hddframes" \
 	--type "$typed" --rerecord 2>/dev/null | digests)"
-hddnat="$(printf '%s\n' "$nat" | grep 'Hard Disk Drive')"
-untyped="$(timeout 900 "$rn" --workdir "$work/hdd0" --formatted-hdd 21mb --frames "$hddframes" --gate 2>/dev/null \
-	| grep 'Hard Disk Drive')"
+# What the write CHANGED, read off the exported image rather than off a memory
+# domain: the disk does not live in guest memory any more, so there is no domain
+# to digest - and the export is the artefact a person actually gets, which makes
+# it the better thing to hold this to.
+timeout 900 "$rn" --workdir "$work/hdd0" --formatted-hdd 21mb --frames "$hddframes" --gate \
+	--savedata-out "$work/sd-untyped" >/dev/null 2>&1
 if [ -z "$nat" ] || [ -z "$box" ]; then
 	echo "FAIL hdd (a run produced no digests)"; fail=1
-elif [ -z "$hddnat" ]; then
-	echo "FAIL hdd (no Hard Disk Drive domain in the native run)"; fail=1
-elif [ "$hddnat" = "$untyped" ]; then
+elif [ ! -s "$work/sd-nat/HardDiskDrive.img" ]; then
+	echo "FAIL hdd (nothing came out of the save-data channel)"; fail=1
+elif cmp -s "$work/sd-nat/HardDiskDrive.img" "$work/sd-untyped/HardDiskDrive.img"; then
 	# the lesson of the hollow pass: equal machines prove nothing if the
 	# machine silently ignored the input
 	echo "FAIL hdd (the typed DOS write did not change the disk)"; fail=1

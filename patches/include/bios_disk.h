@@ -23,6 +23,7 @@
 #include "logging.h"
 #include "../src/dos/cdrom.h"
 #include "memfile.h"
+#include "sparse-disk.h"
 
 /* The Section handling Bios Disk Access */
 #define BIOS_MAX_DISK 10
@@ -181,6 +182,22 @@ class imageDisk_Mem : public imageDisk {
         ~imageDisk_Mem();
 		void Set_GeometryForHardDisk() override; 
         jaffarCommon::file::MemoryFile* _memfile;
+};
+
+// The writable hard disk, which is NOT a memory file: the base image is read
+// from the host as the machine asks for it and only written chunks are held in
+// guest memory (waterbox/sparse-disk.h). Raw images only - the FDI/NHD/HDI
+// header formats above belong to floppies and PC-98 disks, and a hard disk
+// mounted here is a straight sector dump.
+class SparseDisk;
+class imageDisk_Sparse : public imageDisk {
+	public:
+		uint8_t Read_AbsoluteSector(uint32_t sectnum, void * data) override;
+		uint8_t Write_AbsoluteSector(uint32_t sectnum, const void * data) override;
+		imageDisk_Sparse(SparseDisk* disk, const char *imgName, uint32_t imgSizeK);
+		~imageDisk_Sparse();
+		void Set_GeometryForHardDisk() override;
+		SparseDisk* _sparse;
 };
 
 class imageDiskEmptyDrive : public imageDisk {

@@ -371,10 +371,20 @@ int main(int argc, char **argv)
 		if (dosdrv_hdd_size() != 0) {
 			mkdir(savedataOut, 0777);
 			std::string path = std::string(savedataOut) + "/HardDiskDrive.img";
-			if (!writeWholeFile(path, dosdrv_hdd_buffer(), (size_t)dosdrv_hdd_size())) {
-				fprintf(stderr, "could not write %s\n", path.c_str());
-				return 1;
+			// streamed, exactly as the guest ABI's ReadSaveDataFile serves
+			// it: the disk has no contiguous buffer to write out
+			FILE *out = fopen(path.c_str(), "wb");
+			if (out == nullptr) { fprintf(stderr, "could not write %s\n", path.c_str()); return 1; }
+			std::vector<uint8_t> win(256 * 1024);
+			bool ok = true;
+			for (uint64_t off = 0; off < dosdrv_hdd_size() && ok; ) {
+				size_t take = (size_t)std::min<uint64_t>(win.size(), dosdrv_hdd_size() - off);
+				ok = dosdrv_hdd_read(off, win.data(), take)
+					&& fwrite(win.data(), 1, take, out) == take;
+				off += take;
 			}
+			fclose(out);
+			if (!ok) { fprintf(stderr, "could not write %s\n", path.c_str()); return 1; }
 			printf("savedata=1\n");
 		} else {
 			printf("savedata=0\n");

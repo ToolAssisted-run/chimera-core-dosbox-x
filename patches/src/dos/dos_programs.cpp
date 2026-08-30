@@ -6405,7 +6405,12 @@ class IMGMOUNT : public Program {
 							temp_line = paths[0];
 							continue;
 						} else if ((!DOS_MakeName(tmp, fullname, &dummy) || strncmp(Drives[dummy]->GetInfo(), "local directory", 15)) && !qmount) {
-                             if (_memFileDirectory.contains(tmp)) { paths.push_back(tmp); continue; }
+                             /* the writable hard disk is not a memory file - it is
+                                read from the host on demand (sparse-disk.h) - so it
+                                has to be recognised here too, or imgmount decides
+                                the image does not exist and drive C: never appears */
+                             if (_memFileDirectory.contains(tmp)
+                                 || (_sparseHardDisk.isOpen() && _sparseHardDiskName == tmp)) { paths.push_back(tmp); continue; }
                              else WriteOut(MSG_Get(usedef?"PROGRAM_IMGMOUNT_DEFAULT_NOT_FOUND":"PROGRAM_IMGMOUNT_NON_LOCAL_DRIVE"));
                              return true;
                          }
@@ -7138,15 +7143,27 @@ class IMGMOUNT : public Program {
         
  bool DetectGeometry_Mem(const char* fileName, Bitu sizes[]) {
              bool yet_detected = false, readonly = wpcolon&&strlen(fileName)>1&&fileName[0]==':';
-             jaffarCommon::file::MemoryFile * diskfile = _memFileDirectory.fopen(readonly?fileName+1:fileName, "rb");
+             const char* bareName = readonly ? fileName+1 : fileName;
+             uint32_t fcsize;
+             uint8_t buf[512];
+
+             /* the writable hard disk answers from wherever its bytes are - the
+                host for anything untouched, the overlay for anything written */
+             if (_sparseHardDisk.isOpen() && _sparseHardDiskName == bareName) {
+                 fcsize = (uint32_t)(_sparseHardDisk.size() / 512L);
+                 if (!_sparseHardDisk.read(0, buf, sizeof(buf))) {
+                     if (!qmount) WriteOut(MSG_Get("PROGRAM_IMGMOUNT_INVALID_IMAGE"));
+                     return false;
+                 }
+             } else {
+             jaffarCommon::file::MemoryFile * diskfile = _memFileDirectory.fopen(bareName, "rb");
  
              if (!diskfile) {
                  if (!qmount) WriteOut(MSG_Get("PROGRAM_IMGMOUNT_INVALID_IMAGE"));
                  return false;
              }
              jaffarCommon::file::MemoryFile::fseeko64(diskfile, 0L, SEEK_END);
-             uint32_t fcsize = (uint32_t)(jaffarCommon::file::MemoryFile::ftello64(diskfile) / 512L);
-             uint8_t buf[512];
+             fcsize = (uint32_t)(jaffarCommon::file::MemoryFile::ftello64(diskfile) / 512L);
              jaffarCommon::file::MemoryFile::fseeko64(diskfile, 0L, SEEK_SET);
              if (jaffarCommon::file::MemoryFile::fread(buf, sizeof(uint8_t), 512, diskfile)<512) {
                  _memFileDirectory.fclose(diskfile);
@@ -7154,6 +7171,7 @@ class IMGMOUNT : public Program {
                  return false;
              }
              _memFileDirectory.fclose(diskfile);
+             }
              
  
              // check MBR signature for unknown images

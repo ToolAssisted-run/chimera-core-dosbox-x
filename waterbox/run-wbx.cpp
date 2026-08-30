@@ -133,7 +133,13 @@ static int exportSaveData(mb_host *h, const char *dir)
 	intfn Count = (intfn)proc(h, "GetSaveDataFileCount");
 	ptrfn_i Name = (ptrfn_i)proc(h, "GetSaveDataFileName");
 	i64fn_i Size = (i64fn_i)proc(h, "GetSaveDataFileSize");
-	ptrfn_i Buffer = (ptrfn_i)proc(h, "GetSaveDataFileBuffer");
+	// STREAMED, the same way the engine reads it. The hard disk has no
+	// contiguous buffer to point at - its base is on the host and only written
+	// chunks are in guest memory - so it is served a window at a time and
+	// reassembled here. Exactly what comes out of Chimera's Export Save Data.
+	typedef int64_t (MB_GUEST_ABI *readfn)(int32_t, int64_t, int64_t);
+	readfn Read = (readfn)proc(h, "ReadSaveDataFile");
+	ptrfn Scratch = (ptrfn)proc(h, "GetSaveDataScratch");
 	int n = Count();
 	for (int i = 0; i < n; i++) {
 		char path[1024];
@@ -141,10 +147,20 @@ static int exportSaveData(mb_host *h, const char *dir)
 		makeParentDirs(path);
 		FILE *f = fopen(path, "wb");
 		if (!f) { fprintf(stderr, "could not write %s\n", path); return 0; }
-		int64_t size = Size(i);
-		int ok = size == 0 || fwrite((const void *)Buffer(i), 1, (size_t)size, f) == (size_t)size;
+		int64_t size = Size(i), done = 0;
+		int ok = 1;
+		while (done < size && ok) {
+			int64_t got = Read(i, done, size - done);
+			if (got <= 0) { ok = 0; break; }
+			ok = fwrite((const void *)Scratch(), 1, (size_t)got, f) == (size_t)got;
+			done += got;
+		}
 		fclose(f);
-		if (!ok) { fprintf(stderr, "could not write %s\n", path); return 0; }
+		if (!ok || done != size) {
+			fprintf(stderr, "could not write %s (%lld of %lld bytes)\n",
+				path, (long long)done, (long long)size);
+			return 0;
+		}
 	}
 	printf("savedata=%d\n", n);
 	return 1;
@@ -219,11 +235,10 @@ int main(int argc, char **argv)
 
 	// the file, under the frontend's fixed names
 	if (rom) {
-		FILE *f = fopen(rom, "rb");
-		if (!f) { fprintf(stderr, "cannot open %s\n", rom); return 1; }
-		freader rd = { f };
-		wbx_mount_file(h, "rom", file_read, (uintptr_t)&rd, false, &r);
-		fclose(f);
+		// BY PATH, as Chimera does. wbx_mount_file reads the whole file into
+		// host memory first; a hard disk image is the one file here most likely
+		// to be enormous, and the machine reads it a sector at a time anyway.
+		wbx_mount_file_path(h, "rom", rom, &r);
 		if (r.error_message[0]) { fprintf(stderr, "mount rom: %s\n", r.error_message); return 1; }
 		const char *base = strrchr(rom, '/');
 		base = base ? base + 1 : rom;
