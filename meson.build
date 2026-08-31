@@ -23,6 +23,7 @@ defs = [
   '-DSDL_BUILD_MAJOR_VERSION=2', '-DSDL_BUILD_MINOR_VERSION=32',
   '-DSDL_BUILD_MICRO_VERSION=0', '-DHAVE_LINUX_VERSION_H',
   '-DUSING_GENERATED_CONFIG_H', '-D__LINUX__', '-D__INLINE__=inline',
+  '-DCHIMERA_WATERBOX',
 ]
 quiet = [
   '-fno-strict-aliasing', '-Wno-deprecated-declarations', '-Wno-write-strings',
