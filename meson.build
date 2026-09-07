@@ -615,7 +615,11 @@ else
   if mbdir != ''
     mbhost = mbdir / 'build/meson-linux/source/host'
     executable('run-wbx', files('waterbox/run-wbx.cpp'),
-      include_directories: [inc, include_directories(mbdir / 'source/host')],
+      # -I rather than include_directories(): meson refuses to make an absolute
+      # path to a directory inside the source tree, and in CI the Chimera
+      # checkout (and so miniBox) sits inside this repository's workspace.
+      include_directories: inc,
+      cpp_args: ['-I' + mbdir / 'source/host'],
       link_args: [mbhost / 'libminiboxhost.so', '-Wl,-rpath,' + mbhost])
   endif
 endif
