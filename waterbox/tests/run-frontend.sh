@@ -151,6 +151,10 @@ fi
 crun="$chimera_root/build/meson-linux/chimera-run"
 if [ ! -x "$crun" ]; then
 	report "savedata:engine" SKIP "chimera-run not built"
+elif [ ! -x "$rw" ]; then
+	# without it the comparison has nothing to compare against, and an empty
+	# tree reads as a mismatch - say what actually went wrong instead
+	report "savedata:engine" FAIL "sandbox runner not built: $rw (ninja -C build/meson-native)"
 else
 	rm -rf "$work/sd.engine" "$work/sd.box"
 	# a neutral movie for the DOSBox Controller: 4 mouse axes at neutral

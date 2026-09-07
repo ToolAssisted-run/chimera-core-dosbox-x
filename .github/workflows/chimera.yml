@@ -157,10 +157,12 @@ jobs:
           [ -f "$mb/build/meson-cpp/build.ninja" ] || meson setup "$mb/build/meson-cpp" "$mb" -Dguest_cpp=true
           meson compile -C "$mb/build/meson-cpp"
 
-      - name: Build the native reference
+      - name: Build the native reference and the sandbox runner
+        # Both: the savedata leg compares the engine's export tree against the
+        # standalone sandbox runner's, so run-wbx is not optional here.
         run: |
           meson setup build/meson-native -Dminibox_dir="$PWD/chimera-checkout/extern/chimera-common-minibox"
-          ninja -C build/meson-native run-native
+          ninja -C build/meson-native
 
       - name: Build and install the waterbox core package
         # The commit is the core's authoritative version: this build is the one
