@@ -68,6 +68,13 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m);
 // full image size and points at the zstd-compressed head, or 0 for none.
 uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, size_t *zstLen);
 
+/* How many images each swap selector can reach, which is what the mounting
+ * rules above decided - a project's slot lists, or the rom-plus-extras
+ * convention, on whichever drive the extension chose. The Previous/Next inputs
+ * wrap around these, so they have to be the same answer the imgmount lines
+ * are; that is why this lives beside them rather than being counted again. */
+void dosdrv_media_counts(const DosDrvMachine &m, int32_t *floppies, int32_t *cds);
+
 struct DosDrvJoystick {
 	bool up = false, down = false, left = false, right = false;
 	bool button1 = false, button2 = false;

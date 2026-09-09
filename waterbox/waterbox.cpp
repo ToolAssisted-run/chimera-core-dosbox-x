@@ -62,6 +62,9 @@ static uint8_t g_prevButtons[BTN_COUNT];  // last frame's levels (edges)
 // disk-swap selection (guest state: savestates and movies carry it)
 static int32_t g_pendingFloppy;
 static int32_t g_pendingCD;
+// and what there is to select from, so the selectors can wrap (see below)
+static int32_t g_floppyCount;
+static int32_t g_cdCount;
 
 static float g_mouseSensitivity = 3.0f;
 static bool g_joystick1Enabled = true;
@@ -335,6 +338,8 @@ ECL_EXPORT int Init(void)
 
 	// which lights this machine has: the media the project actually mounted
 	registerDriveLights(m.hddMounted, !m.cdImages.empty());
+	// and how far the swap selectors may go, which is the same answer
+	dosdrv_media_counts(m, &g_floppyCount, &g_cdCount);
 
 	std::string err;
 	if (!dosdrv_boot(cfg, &err)) {
@@ -406,13 +411,32 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 	}
 
 	// disk-swap controls, edge triggered; the pending index is guest state
+	//
+	// The selector WRAPS, the way the changer it stands for does: Next past the
+	// last disc comes back to the first. Without that it walks off the end and
+	// never returns - DriveManager reads a position beyond the last disc as
+	// "put the first one in", so on a two-disc machine a second Next silently
+	// reinserts disc one, and every press after that keeps it there. Nothing
+	// says so, and no arrangement of Next and Swap can reach disc two again;
+	// only a fresh session can. That is issue #47.
 	auto rose = [&](int i) { return g_buttons[i] && !g_prevButtons[i]; };
-	if (rose(BTN_SWAP + 0)) g_pendingFloppy--;
-	if (rose(BTN_SWAP + 1)) g_pendingFloppy++;
-	if (rose(BTN_SWAP + 2)) g_input.insertFloppyDisk = g_pendingFloppy < 0 ? 0 : g_pendingFloppy;
-	if (rose(BTN_SWAP + 3)) g_pendingCD--;
-	if (rose(BTN_SWAP + 4)) g_pendingCD++;
-	if (rose(BTN_SWAP + 5)) g_input.insertCDROM = g_pendingCD < 0 ? 0 : g_pendingCD;
+	auto step = [](int32_t &pending, int32_t count, int32_t by) {
+		if (count <= 1) { pending = 0; return; }
+		pending = (pending + by) % count;
+		if (pending < 0) pending += count;
+	};
+	if (rose(BTN_SWAP + 0)) step(g_pendingFloppy, g_floppyCount, -1);
+	if (rose(BTN_SWAP + 1)) step(g_pendingFloppy, g_floppyCount, +1);
+	if (rose(BTN_SWAP + 2)) g_input.insertFloppyDisk = g_pendingFloppy;
+	if (rose(BTN_SWAP + 3)) step(g_pendingCD, g_cdCount, -1);
+	if (rose(BTN_SWAP + 4)) step(g_pendingCD, g_cdCount, +1);
+	if (rose(BTN_SWAP + 5)) g_input.insertCDROM = g_pendingCD;
+	// which disc is selected is otherwise invisible, and somebody who cannot
+	// see it cannot tell a selector that moved from one that did not
+	if (rose(BTN_SWAP + 0) || rose(BTN_SWAP + 1))
+		printf("[dosbox-x] floppy selector: %d of %d\n", g_pendingFloppy + 1, g_floppyCount);
+	if (rose(BTN_SWAP + 3) || rose(BTN_SWAP + 4))
+		printf("[dosbox-x] CD selector: %d of %d\n", g_pendingCD + 1, g_cdCount);
 
 	memcpy(g_prevButtons, g_buttons, sizeof g_prevButtons);
 

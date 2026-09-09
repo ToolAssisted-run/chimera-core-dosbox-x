@@ -176,6 +176,25 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	return conf;
 }
 
+void dosdrv_media_counts(const DosDrvMachine &m, int32_t *floppies, int32_t *cds)
+{
+	int32_t f = 0, c = 0;
+	if (!m.floppyImages.empty() || !m.cdImages.empty()) {
+		f = (int32_t)m.floppyImages.size();
+		c = (int32_t)m.cdImages.size();
+	} else {
+		/* the extras convention: the rom and rom2..romN all mount on ONE
+		 * drive, chosen by the rom's extension - the same test as above */
+		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
+		for (const char *e : floppyExts) {
+			if (m.romExt == e) { f = 1 + m.extraImageCount; break; }
+		}
+		if (m.romExt == ".iso" || m.romExt == ".cue") c = 1 + m.extraImageCount;
+	}
+	if (floppies != nullptr) *floppies = f;
+	if (cds != nullptr) *cds = c;
+}
+
 uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, size_t *zstLen)
 {
 	for (size_t i = 0; i < sizeof dosdrv_formatted_disks / sizeof dosdrv_formatted_disks[0]; i++) {

@@ -245,6 +245,30 @@ else
 	echo "PASS cdswap ($swapframes frames, disc 2 in and back out through the swap buttons, native==sandbox==rerecord)"
 fi
 
+# ...and the selector has to WRAP. It is a position, and DriveManager reads a
+# position past the last disc as "put the FIRST one in" - so on a two-disc
+# machine a second Next silently reinserts disc one, and no arrangement of
+# inputs reaches disc two again for the rest of the session. Nothing says so.
+# That is issue #47, and the check is that three Nexts land where one does.
+wraptype='type D:\HELLO2.TXT
+'
+wrapnone="$(timeout 1200 "$rw" "$core" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --type "$wraptype" 2>/dev/null | digests)"
+wrapone="$(timeout 1200 "$rw" "$core" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --swap-cd 100:1 --type "$wraptype" 2>/dev/null | digests)"
+wrapthree="$(timeout 1200 "$rw" "$core" --rom "$work/test.iso" --extra-file "rom2=$work/disc2.iso" \
+	--frames "$swapframes" --swap-cd 100:1 --swap-cd 115:2 --swap-cd 130:3 --type "$wraptype" 2>/dev/null | digests)"
+if [ -z "$wrapone" ] || [ -z "$wrapthree" ]; then
+	echo "FAIL cdswap-wrap (a run produced no digests)"; fail=1
+elif [ "$wrapone" = "$wrapnone" ]; then
+	echo "FAIL cdswap-wrap (one Next did not reach disc 2, so the wrap check proves nothing)"; fail=1
+elif [ "$wrapthree" != "$wrapone" ]; then
+	echo "FAIL cdswap-wrap (the selector walked past the last disc and did not come back: issue #47)"
+	echo "--- one Next"; echo "$wrapone"; echo "--- three Nexts"; echo "$wrapthree"; fail=1
+else
+	echo "PASS cdswap-wrap (three Nexts on a two-disc machine land where one does)"
+fi
+
 # ---- the floppy-swap leg ---------------------------------------------------
 # The cdswap proof on drive A: two machine-generated FAT12 floppies
 # (gen-testfloppy.py) in the swap list, floppy 2 in at frame 100 through the
