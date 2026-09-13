@@ -27,7 +27,11 @@ typedef struct {
 	uint8_t joyUp, joyDown, joyLeft, joyRight, joyB1, joyB2;
 } ExLevels;
 
-static inline ExLevels exercise_levels(long frame)
+/* positionOnly: the mouse is driven by Mouse Position alone, both speeds held
+ * at zero - which moves it by how far the position moved, as BizHawk does
+ * (issue #61). Before that was ported this pattern moved nothing, and the
+ * gate's differential against a quiet run is what says so. */
+static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 {
 	ExLevels e;
 	e.posX = 400; e.posY = 300; e.spdX = 0; e.spdY = 0;
@@ -48,7 +52,23 @@ static inline ExLevels exercise_levels(long frame)
 	e.joyLeft = (uint8_t)((frame >> 3) & 1);
 	e.joyB1 = (uint8_t)((frame >> 3) & 1);
 	e.joyB2 = (uint8_t)((frame >> 4) & 1);
+	if (positionOnly) {
+		/* NOTHING but the position: a button or a stick would change the
+		 * screen by itself, and then the differential against a quiet run
+		 * would pass without the mouse ever moving. A new spot every 8 frames,
+		 * far enough apart to show on screen. */
+		const uint64_t step = (uint64_t)(frame / 8) * 6364136223846793005ULL + 1442695040888963407ULL;
+		e.mouseL = 0; e.mouseR = 0;
+		e.joyUp = 0; e.joyDown = 0; e.joyLeft = 0; e.joyRight = 0;
+		e.joyB1 = 0; e.joyB2 = 0;
+		e.spdX = 0;
+		e.spdY = 0;
+		e.posX = (int32_t)((step >> 16) % 801);
+		e.posY = (int32_t)((step >> 32) % 601);
+	}
 	return e;
 }
+
+static inline ExLevels exercise_levels(long frame) { return exercise_levels_mode(frame, 0); }
 
 #endif

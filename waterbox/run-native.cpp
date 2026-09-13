@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 	const char *sliceOut = nullptr;
 	unsigned long sliceOff = 0, sliceLen = 0;
 	int frames = 600;
-	bool gate = false, verbose = false, exercise = false;
+	bool gate = false, verbose = false, exercise = false, exercisePosition = false;
 	const char *formattedHdd = "none";
 	DosDrvMachine m;
 
@@ -172,6 +172,7 @@ int main(int argc, char **argv)
 		}
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
+		else if (!strcmp(argv[i], "--exercise-position")) { exercise = true; exercisePosition = true; }
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
 		else if (!strcmp(argv[i], "--joysticks")) { m.joystick1 = true; m.joystick2 = true; }
 		else if (!strcmp(argv[i], "--no-joysticks")) { m.joystick1 = false; m.joystick2 = false; }
@@ -276,7 +277,7 @@ int main(int argc, char **argv)
 	uint64_t gateV = 0, gateA = 0;
 	size_t typePos = 0;
 	int typePhase = 0; // interleave press / release frames
-	ExLevels prevEx = exercise_levels(0);
+	ExLevels prevEx = exercise_levels_mode(0, exercisePosition);
 	for (int i = 0; i < frames; i++) {
 		DosDrvInput in;
 		// the frame slice follows the machine's reported refresh, exactly as
@@ -305,7 +306,7 @@ int main(int argc, char **argv)
 		if (exercise) {
 			// the shared deterministic pattern; levels become the driver's
 			// edges here, exactly as the guest adapter converts them
-			ExLevels ex = exercise_levels(i);
+			ExLevels ex = exercise_levels_mode(i, exercisePosition);
 			in.mouse.posX = ex.posX;
 			in.mouse.posY = ex.posY;
 			in.mouse.speedX = ex.spdX;

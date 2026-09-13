@@ -353,15 +353,15 @@ python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
 python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" >/dev/null
 inputframes=500
 inputleg() {
-	name="$1"; cmd="$2"; joyflag="$3"
+	name="$1"; cmd="$2"; joyflag="$3"; exflag="${4:---exercise}"
 	nat="$(timeout 900 "$rn" --workdir "$work/in-$name" --rom "$work/input.iso" $joyflag \
-		--frames "$inputframes" --gate --exercise --type "$cmd" 2>/dev/null | digests)"
+		--frames "$inputframes" --gate $exflag --type "$cmd" 2>/dev/null | digests)"
 	quiet="$(timeout 900 "$rn" --workdir "$work/in-$name-q" --rom "$work/input.iso" $joyflag \
 		--frames "$inputframes" --gate --type "$cmd" 2>/dev/null | digests)"
 	box="$(timeout 1200 "$rw" "$core" --rom "$work/input.iso" $joyflag \
-		--frames "$inputframes" --exercise --type "$cmd" 2>/dev/null | digests)"
+		--frames "$inputframes" $exflag --type "$cmd" 2>/dev/null | digests)"
 	rr="$(timeout 3600 "$rw" "$core" --rom "$work/input.iso" $joyflag \
-		--frames "$inputframes" --exercise --type "$cmd" --rerecord 2>/dev/null | digests)"
+		--frames "$inputframes" $exflag --type "$cmd" --rerecord 2>/dev/null | digests)"
 	if [ -z "$nat" ] || [ -z "$box" ]; then
 		echo "FAIL input:$name (a run produced no digests)"; fail=1
 	elif [ "$nat" = "$quiet" ]; then
@@ -380,6 +380,11 @@ inputleg joystick 'd:\joytest.com
 ' --joysticks
 inputleg mouse 'd:\mousetest.com
 ' ""
+# Mouse Position alone, both speeds zero: moves by how far the position moved,
+# as BizHawk's frontend does. Before that was ported (issue #61) this run drew
+# exactly what the quiet one did, and the differential above said so.
+inputleg mouse-position 'd:\mousetest.com
+' "" --exercise-position
 
 # ---- the slots leg ---------------------------------------------------------
 # The project's slot map (chimera docs/project.md): MIXED media, which the

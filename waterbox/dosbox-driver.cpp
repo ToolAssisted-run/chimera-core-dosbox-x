@@ -426,12 +426,26 @@ void dosdrv_frame(const DosDrvInput &f)
 	}
 
 	// Mouse
-	if (f.mouse.speedX != 0 || f.mouse.speedY != 0) {
+	//
+	// A speed of zero means "move by how far the position moved" - BizHawk's
+	// frontend does exactly this before its driver sees the frame (DOSBox.cs:
+	// DeltaX = SpeedX != 0 ? SpeedX : PosX - lastPosX, the last position kept
+	// in its savestate). It was never ported, so Mouse Position X/Y did nothing
+	// on its own (issue #61). It lives here rather than in the guest adapter so
+	// that the native reference and the sandbox share it, and the last position
+	// is ordinary guest memory, so a savestate carries it as BizHawk's does.
+	// Like BizHawk, it is kept whether or not either speed was given.
+	static int32_t lastMousePosX = 0, lastMousePosY = 0;
+	const int32_t mouseSpeedX = f.mouse.speedX != 0 ? f.mouse.speedX : f.mouse.posX - lastMousePosX;
+	const int32_t mouseSpeedY = f.mouse.speedY != 0 ? f.mouse.speedY : f.mouse.posY - lastMousePosY;
+	lastMousePosX = f.mouse.posX;
+	lastMousePosY = f.mouse.posY;
+	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
 		mouse.x = (double)mouse.min_x + ((double)f.mouse.posX / (double)MOUSE_MAX_X) * (double)mouse.max_x;
 		mouse.y = (double)mouse.min_y + ((double)f.mouse.posY / (double)MOUSE_MAX_Y) * (double)mouse.max_y;
 
-		float adjustedDeltaX = (float)f.mouse.speedX * f.mouse.sensitivity;
-		float adjustedDeltaY = (float)f.mouse.speedY * f.mouse.sensitivity;
+		float adjustedDeltaX = (float)mouseSpeedX * f.mouse.sensitivity;
+		float adjustedDeltaY = (float)mouseSpeedY * f.mouse.sensitivity;
 
 		float dx = adjustedDeltaX * mouse.pixelPerMickey_x;
 		float dy = adjustedDeltaY * mouse.pixelPerMickey_y;

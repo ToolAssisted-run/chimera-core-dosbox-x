@@ -99,7 +99,11 @@ not blocked on the ABI.
 - `src/ints/mouse.cpp`: cursor permanently locked (`user_cursor_locked`),
   driver injects absolute position (scaled to the DOS range via
   mouse.min/max), relative mickeys from speedX/Y * sensitivity, PS/2
-  accumulators, and button press/release events.
+  accumulators, and button press/release events. A speed of zero on an
+  axis means "move by how far the position moved since the last frame",
+  the conversion BizHawk's frontend makes before its driver sees the frame
+  (the last position is guest memory, so savestates carry it); without it
+  Mouse Position X/Y alone never moved the mouse (issue #61).
 
 Chimera: joystick axes ride the existing axis channel (analog, an
 improvement over BizHawk's digital-only sticks); mouse position/speed are

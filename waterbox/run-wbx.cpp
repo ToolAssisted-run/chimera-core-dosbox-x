@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 	std::vector<std::pair<long, int>> swapFd;
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
-	bool rerecord = false, turbo = false, joysticks = false, exercise = false;
+	bool rerecord = false, turbo = false, joysticks = false, exercise = false, exercisePosition = false;
 	long turboSettle = 0;
 	std::vector<std::string> extraSettings; // KEY=VALUE, string or number
 
@@ -207,6 +207,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--turbo")) turbo = true;
 		else if (!strcmp(argv[i], "--turbo-settle") && i + 1 < argc) turboSettle = strtol(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
+		else if (!strcmp(argv[i], "--exercise-position")) { exercise = true; exercisePosition = true; }
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
 		else if (!strcmp(argv[i], "--setting") && i + 1 < argc) extraSettings.push_back(argv[++i]);
 		else if (!wbxPath) wbxPath = argv[i];
@@ -400,7 +401,7 @@ int main(int argc, char **argv)
 			// the shared pattern, driven exactly as the frontend drives the
 			// guest: axes through SetAxis, button LEVELS through SetButton
 			// (the adapter converts mouse levels to edges itself)
-			ExLevels ex = exercise_levels(i);
+			ExLevels ex = exercise_levels_mode(i, exercisePosition);
 			SetAxis(0, ex.posX);
 			SetAxis(1, ex.posY);
 			SetAxis(2, ex.spdX);
