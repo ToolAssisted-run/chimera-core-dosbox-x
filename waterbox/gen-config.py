@@ -322,27 +322,27 @@ config = {
             "default": "auto", "sync": True
         },
         {
-            "name": "pc98FontRom", "display": "PC-98 Font ROM",
+            "name": "pc98FontRom", "display": "Use PC-98 Font ROM",
             "description": "Draw PC-98 text with a real NEC character ROM (FONT.ROM) instead of the built-in free font. Only meaningful with a pc98 video card type.",
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "pc98SoundBios", "display": "PC-98 Sound BIOS",
+            "name": "pc98SoundBios", "display": "Use PC-98 Sound BIOS",
             "description": "Map the PC-9801-26K/86 sound board's BIOS (SOUND.ROM) at CC000h. The FM board plays without it; games that call the sound BIOS do not. Only meaningful with a pc98 video card type.",
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "pc98RhythmSamples", "display": "PC-98 Rhythm Samples",
+            "name": "pc98RhythmSamples", "display": "Use PC-98 Rhythm Samples",
             "description": "Give the PC-9801-86 board's YM2608 its six built-in drum samples (2608_bd/sd/top/hh/tom/rim.wav). Without them FM music plays with no drums. Only meaningful with a pc98 video card type.",
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "ibmRomBasic", "display": "IBM ROM BASIC",
+            "name": "ibmRomBasic", "display": "Use IBM ROM BASIC",
             "description": "Load IBM Cassette/ROM BASIC below the BIOS at F6000h, as an IBM 5150 has it. PC-DOS's BASICA needs it, and so does booting with no disk.",
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "vgaBiosRom", "display": "Video BIOS ROM",
+            "name": "vgaBiosRom", "display": "Use Real Video BIOS",
             "description": "Run a real video BIOS dumped from the card chosen in Video Card Type, instead of the one DOSBox-X generates. For software that probes the card's BIOS.",
             "type": "bool", "default": False, "sync": True
         }
