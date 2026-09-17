@@ -178,11 +178,23 @@ FIRMWARE = [
     FW("CM32L_PCM.ROM", "Roland CM-32L PCM ROM", ROLAND + "CM-32L / CM-64 / LAPC-I.",
        1048576, "CM32L_PCM.ROM", "289CC298AD532B702461BFC738009D9EBE8025EA", "CM-32L PCM", midi_is("cm32l")),
     FW("FONT.ROM", "PC-98 font ROM", "The character ROM of an NEC PC-98 you own: 8x8, 8x16 and the 16x16 kanji.",
-       288768, "FONT.ROM", None, "NEC PC-98 FONT.ROM", flag("pc98FontRom")),
+       288768, "FONT.ROM", "78BA9960F135372825AB7244B5E4E73A810002FF", "NEC PC-98 FONT.ROM", flag("pc98FontRom")),
     FW("SOUND.ROM", "PC-98 sound BIOS", "The 16 KiB BIOS of a PC-9801-26K or -86 sound board you own.",
-       16384, "SOUND.ROM", None, "NEC PC-9801-26K/86 SOUND.ROM", flag("pc98SoundBios")),
+       16384, "SOUND.ROM", "D5DBC4FEA3B8367024D363F5351BAECD6ADCD8EF", "NEC PC-9801-26K/86 SOUND.ROM", flag("pc98SoundBios")),
+] + [
+    FW(f"2608_{n}.wav", f"PC-98 rhythm sample ({what})", "One of the six drum samples inside the YM2608 (OPNA) of a PC-9801-86 sound board, as the WAV files PC-98 emulators share. Without them the board plays with its rhythm channel silent.",
+       size, f"2608_{n}.wav", sha, f"YM2608 {what}", flag("pc98RhythmSamples"))
+    for n, what, size, sha in [
+        ("bd", "bass drum", 19192, "0A56C142EF40CEC50F3EE56A6E42D0029C9E2818"),
+        ("sd", "snare drum", 15558, "3C79663EF74C0B0439D13351326EB1C52A657008"),
+        ("top", "top cymbal", 57016, "AA4A8F766A86B830687D5083FD3B9DB0652F46FC"),
+        ("hh", "hi-hat", 36722, "12F676CEF249B82480B6F19C454E234B435CA7B6"),
+        ("tom", "tom-tom", 23092, "9513FB4A3F41E75A972A273A5104CBD834C1E2C5"),
+        ("rim", "rim shot", 5288, "C65592330C9DD84011151DAED52F9AEC926B7E56"),
+    ]
+] + [
     FW("IBMBASIC.ROM", "IBM ROM BASIC", "The 32 KiB BASIC ROM set of an IBM 5150 you own, as one image for F6000h (often named IBMROMBASIC-F6000h-1982-10-27.ROM).",
-       32768, "IBMROMBASIC-F6000h-1982-10-27.ROM", None, "IBM BASIC C1.10", flag("ibmRomBasic")),
+       32768, "IBMROMBASIC-F6000h-1982-10-27.ROM", "07449EBCA18F979B9AB748582B736E402F2BF940", "IBM BASIC C1.10", flag("ibmRomBasic")),
     FW("VGABIOS.BIN", "Video BIOS", "The video BIOS of the card chosen in Video Card Type, 1 to 64 KiB, dumped from a card you own. DOSBox-X knows et4000.bin for svga_et4000 and the S3 Trio64 v1.5-07 BIOS for svga_s3.",
        0, "et4000.bin", None, "Video BIOS", flag("vgaBiosRom")),  # size 0: any, a video BIOS is 1 to 64 KiB
 ]
@@ -317,6 +329,11 @@ config = {
         {
             "name": "pc98SoundBios", "display": "PC-98 Sound BIOS",
             "description": "Map the PC-9801-26K/86 sound board's BIOS (SOUND.ROM) at CC000h. The FM board plays without it; games that call the sound BIOS do not. Only meaningful with a pc98 video card type.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
+            "name": "pc98RhythmSamples", "display": "PC-98 Rhythm Samples",
+            "description": "Give the PC-9801-86 board's YM2608 its six built-in drum samples (2608_bd/sd/top/hh/tom/rim.wav). Without them FM music plays with no drums. Only meaningful with a pc98 video card type.",
             "type": "bool", "default": False, "sync": True
         },
         {
