@@ -86,6 +86,7 @@ extern bool user_cursor_locked;
 // run" and nothing longer-lived than that.
 bool _cdDriveUsed = false;
 bool _diskDriveUsed = false;
+bool _floppyDriveUsed = false; // drive_fat.cpp tells a floppy from the hard disk
 
 // ---- configuration composition ---------------------------------------------
 
@@ -423,6 +424,7 @@ void dosdrv_frame(const DosDrvInput &f)
 {
 	_cdDriveUsed = false;
 	_diskDriveUsed = false;
+	_floppyDriveUsed = false;
 
 	// Keyboard: diff against the previous frame into press/release sets
 	_releasedKeys.clear();
@@ -546,6 +548,7 @@ void dosdrv_refresh_rate(int *numerator, int *denominator)
 
 bool dosdrv_cd_activity() { return _cdDriveUsed; }
 bool dosdrv_disk_activity() { return _diskDriveUsed; }
+bool dosdrv_floppy_activity() { return _floppyDriveUsed; }
 bool dosdrv_input_was_read() { return true; } // no lag concept yet (as in BizHawk)
 
 // ---- memory domains -------------------------------------------------------

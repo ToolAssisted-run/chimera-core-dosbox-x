@@ -175,6 +175,7 @@ int main(int argc, char **argv)
 	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
 	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
 	std::vector<std::pair<long, int>> swapFd;
+	std::vector<long> nextCd; // FRAME: the selector moves and nothing is swapped in
 	int memsize = -1000000, cycles = -1000000; // sentinel: not given
 	long frames = 600;
 	bool rerecord = false, turbo = false, joysticks = false, exercise = false, exercisePosition = false;
@@ -192,6 +193,7 @@ int main(int argc, char **argv)
 			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-cd wants FRAME:INDEX\n"); return 2; }
 			swapCd.push_back({ fr, idx });
 		}
+		else if (!strcmp(argv[i], "--next-cd") && i + 1 < argc) nextCd.push_back(atol(argv[++i]));
 		else if (!strcmp(argv[i], "--swap-fd") && i + 1 < argc) {
 			long fr = 0; int idx = 0;
 			if (sscanf(argv[++i], "%ld:%d", &fr, &idx) != 2) { fprintf(stderr, "--swap-fd wants FRAME:INDEX\n"); return 2; }
@@ -397,6 +399,7 @@ int main(int argc, char **argv)
 		};
 		pressSwap(swapFd, EX_BTN_SWAP + 0, pendingFdShadow);
 		pressSwap(swapCd, EX_BTN_SWAP + 3, pendingCdShadow);
+		for (long at : nextCd) if (at == i) { SetButton(EX_BTN_SWAP + 4, 1); swapHeld = true; }
 		if (exercise) {
 			// the shared pattern, driven exactly as the frontend drives the
 			// guest: axes through SetAxis, button LEVELS through SetButton
@@ -439,6 +442,22 @@ int main(int argc, char **argv)
 	printf("videoHash=%016llx\n", (unsigned long long)vh);
 	printf("tailVideoHash=%016llx\n", (unsigned long long)th);
 	printf("audioHash=%016llx\n", (unsigned long long)ah);
+	// what each drive holds, as the frontend's status bar is told it
+	{
+		typedef int (MB_GUEST_ABI *intfn_i)(int);
+		typedef uintptr_t (MB_GUEST_ABI *ptrfn_ii)(int, int);
+		intfn driveCount = (intfn)proc(h, "GetDriveCount");
+		ptrfn_i driveName = (ptrfn_i)proc(h, "GetDriveName");
+		intfn_i mediaCount = (intfn_i)proc(h, "GetDriveMediaCount");
+		ptrfn_ii mediaName = (ptrfn_ii)proc(h, "GetDriveMediaName");
+		intfn_i mediaSelected = (intfn_i)proc(h, "GetDriveMediaSelected");
+		intfn_i mediaInserted = (intfn_i)proc(h, "GetDriveMediaInserted");
+		for (int d = 0; d < driveCount(); d++) {
+			int held = mediaCount(d), sel = mediaSelected(d), in = mediaInserted(d);
+			printf("drive[%s] media=%d selected=%d(%s) inserted=%d(%s)\n", (const char *)driveName(d), held,
+				sel, held ? (const char *)mediaName(d, sel) : "-", in, held && in >= 0 ? (const char *)mediaName(d, in) : "-");
+		}
+	}
 	int nd = GetMemoryDomainCount();
 	for (int i = 0; i < nd; i++) {
 		const char *dname = (const char *)GetMemoryDomainName(i);

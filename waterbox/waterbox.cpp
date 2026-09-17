@@ -34,14 +34,50 @@ static char g_loadError[512];
  * Declared from what the PROJECT mounted rather than from what DOSBox-X could
  * in principle emulate: a light for a drive nobody put anything in is a light
  * that never comes on, which is worse than no light at all. */
-static struct { const char *name; bool (*lit)(void); } g_driveLights[2];
+/* A drive that takes images also says WHICH it holds (the optional
+ * GetDriveMedia* exports below): the list the project gave it, where the
+ * selector stands, and which image is actually in. Those are two facts here -
+ * Previous/Next move the selector and only Swap puts the selected image in - and
+ * until they were shown, somebody pressing Next had no way to tell a selector
+ * that moved from one that did not, or that the game was still reading the old
+ * disc. */
+struct DriveLight {
+	const char *name;
+	bool (*lit)(void);
+	const std::vector<std::string> *media; // null: holds one fixed thing
+	const int32_t *selected, *inserted;
+};
+static DriveLight g_driveLights[3];
 static int g_driveLightCount;
+static std::vector<std::string> g_floppyNames, g_cdNames;
+static int32_t g_insertedFloppy, g_insertedCD; // guest state, like the selectors
+extern int32_t g_pendingFloppy, g_pendingCD;
 
-static void registerDriveLights(bool haveDisk, bool haveCd)
+static void registerDriveLights(bool haveDisk, bool haveFloppy, bool haveCd);
+
+/* The names are the project's, as the slot map gave them. A bare rom has none -
+ * it is mounted as "rom", "rom2".. - so its images are numbered instead: a label
+ * reading "rom2" would be the mount's business showing through. */
+static void registerDriveMedia(const DosDrvMachine &m)
+{
+	int32_t floppies = 0, cds = 0;
+	dosdrv_media_counts(m, &floppies, &cds);
+	auto named = [](const std::vector<std::string> &given, int32_t count) {
+		std::vector<std::string> names = given;
+		for (int32_t i = (int32_t)names.size(); i < count; i++) names.push_back("Disk " + std::to_string(i + 1));
+		return names;
+	};
+	g_floppyNames = named(m.floppyImages, floppies);
+	g_cdNames = named(m.cdImages, cds);
+	registerDriveLights(m.hddMounted, floppies > 0, cds > 0);
+}
+
+static void registerDriveLights(bool haveDisk, bool haveFloppy, bool haveCd)
 {
 	g_driveLightCount = 0;
-	if (haveDisk) g_driveLights[g_driveLightCount++] = { "Hard Disk", dosdrv_disk_activity };
-	if (haveCd) g_driveLights[g_driveLightCount++] = { "CD-ROM", dosdrv_cd_activity };
+	if (haveFloppy) g_driveLights[g_driveLightCount++] = { "Floppy Disk", dosdrv_floppy_activity, &g_floppyNames, &g_pendingFloppy, &g_insertedFloppy };
+	if (haveDisk) g_driveLights[g_driveLightCount++] = { "Hard Disk", dosdrv_disk_activity, nullptr, nullptr, nullptr };
+	if (haveCd) g_driveLights[g_driveLightCount++] = { "CD-ROM", dosdrv_cd_activity, &g_cdNames, &g_pendingCD, &g_insertedCD };
 }
 
 
@@ -60,8 +96,8 @@ static uint8_t g_buttons[BTN_COUNT];      // current levels, set by SetButton
 static uint8_t g_prevButtons[BTN_COUNT];  // last frame's levels (edges)
 
 // disk-swap selection (guest state: savestates and movies carry it)
-static int32_t g_pendingFloppy;
-static int32_t g_pendingCD;
+int32_t g_pendingFloppy;
+int32_t g_pendingCD;
 // and what there is to select from, so the selectors can wrap (see below)
 static int32_t g_floppyCount;
 static int32_t g_cdCount;
@@ -344,7 +380,7 @@ ECL_EXPORT int Init(void)
 	cfg.confText = dosdrv_compose_conf(m);
 
 	// which lights this machine has: the media the project actually mounted
-	registerDriveLights(m.hddMounted, !m.cdImages.empty());
+	registerDriveMedia(m);
 	// and how far the swap selectors may go, which is the same answer
 	dosdrv_media_counts(m, &g_floppyCount, &g_cdCount);
 
@@ -434,10 +470,10 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 	};
 	if (rose(BTN_SWAP + 0)) step(g_pendingFloppy, g_floppyCount, -1);
 	if (rose(BTN_SWAP + 1)) step(g_pendingFloppy, g_floppyCount, +1);
-	if (rose(BTN_SWAP + 2)) g_input.insertFloppyDisk = g_pendingFloppy;
+	if (rose(BTN_SWAP + 2)) g_input.insertFloppyDisk = g_insertedFloppy = g_pendingFloppy;
 	if (rose(BTN_SWAP + 3)) step(g_pendingCD, g_cdCount, -1);
 	if (rose(BTN_SWAP + 4)) step(g_pendingCD, g_cdCount, +1);
-	if (rose(BTN_SWAP + 5)) g_input.insertCDROM = g_pendingCD;
+	if (rose(BTN_SWAP + 5)) g_input.insertCDROM = g_insertedCD = g_pendingCD;
 	// which disc is selected is otherwise invisible, and somebody who cannot
 	// see it cannot tell a selector that moved from one that did not
 	if (rose(BTN_SWAP + 0) || rose(BTN_SWAP + 1))
@@ -552,6 +588,29 @@ ECL_EXPORT const char *GetDriveName(int32_t i)
 ECL_EXPORT int32_t GetDriveLight(int32_t i)
 {
 	return i >= 0 && i < g_driveLightCount && g_driveLights[i].lit() ? 1 : 0;
+}
+
+/* What each drive holds (engine.h, "What is in a drive"). A drive with one
+ * image still says so: "1 of 1" tells somebody the Next input has nowhere to go,
+ * which an absent label would leave them to find out by pressing it. */
+ECL_EXPORT int32_t GetDriveMediaCount(int32_t i)
+{
+	return i >= 0 && i < g_driveLightCount && g_driveLights[i].media != nullptr ? (int32_t)g_driveLights[i].media->size() : 0;
+}
+
+ECL_EXPORT const char *GetDriveMediaName(int32_t i, int32_t n)
+{
+	return n >= 0 && n < GetDriveMediaCount(i) ? (*g_driveLights[i].media)[(size_t)n].c_str() : nullptr;
+}
+
+ECL_EXPORT int32_t GetDriveMediaSelected(int32_t i)
+{
+	return GetDriveMediaCount(i) > 0 ? *g_driveLights[i].selected : 0;
+}
+
+ECL_EXPORT int32_t GetDriveMediaInserted(int32_t i)
+{
+	return GetDriveMediaCount(i) > 0 ? *g_driveLights[i].inserted : -1;
 }
 
 // ---- memory domains ----

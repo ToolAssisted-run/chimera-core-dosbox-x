@@ -138,6 +138,7 @@ void dosdrv_refresh_rate(int *numerator, int *denominator);
    and they mean different things. */
 bool dosdrv_cd_activity();
 bool dosdrv_disk_activity();
+bool dosdrv_floppy_activity();
 // Nonzero while dosbox reads input this frame - the lag-frame signal.
 bool dosdrv_input_was_read();
 
