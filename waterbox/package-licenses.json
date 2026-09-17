@@ -21,6 +21,15 @@
       "sourceUrl": "https://github.com/joncampbell123/dosbox-x/archive/{commit}.tar.gz"
     },
     {
+      "name": "GNU Unifont (FREECG98.BMP, UnifontExMonoAnk.fontx2, UnifontExMonoKanji.fontx2)",
+      "license": "GPL-2.0-or-later WITH Font-exception-2.0",
+      "url": "https://unifoundry.com/unifont/",
+      "commit": "{submodule:extern/dosbox-x}",
+      "file": "extern/dosbox-x/COPYING",
+      "sourceUrl": "https://github.com/joncampbell123/dosbox-x/archive/{commit}.tar.gz",
+      "note": "The free fonts DOSBox-X ships in contrib/fonts and looks for by name: the PC-98 character set (rendered from Unifont, dosbox-x issue 2132) and Unifont as FONTX2 for DOS/V and JEGA. Embedded in the core because the sandbox has no disk to keep them on."
+    },
+    {
       "name": "SDL2 (vendored, modified for the sandbox)",
       "license": "zlib",
       "url": "https://github.com/libsdl-org/SDL",

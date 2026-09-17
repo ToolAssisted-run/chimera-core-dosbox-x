@@ -3,12 +3,12 @@
 pre-formatted FAT16 disk heads (zstd) into a generated header, compiled into
 BOTH builds so the driver composes identical configuration everywhere.
 
-usage: gen-assets.py <output.h> <conf-dir> <hdd-dir>
+usage: gen-assets.py <output.h> <conf-dir> <hdd-dir> <font-dir>
 """
 import os
 import sys
 
-out, confdir, hdddir = sys.argv[1], sys.argv[2], sys.argv[3]
+out, confdir, hdddir, fontdir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 
 def carray(name, data):
     lines = [f'static const unsigned char {name}[] = {{']
@@ -55,6 +55,20 @@ for fn in sorted(os.listdir(hdddir)):
 chunks.append('static const struct { const char *name; const unsigned char *zst; size_t zstLen; unsigned long long imageSize; } dosdrv_formatted_disks[] = {')
 for key, ident, size in disks:
     chunks.append(f'\t{{ "{key}", {ident}, sizeof {ident}, {size}ULL }},')
+chunks.append('};')
+chunks.append('')
+
+# the free fonts DOSBox-X ships beside its executable and looks for by name
+# (contrib/fonts): the PC-98 character set, and Unifont as FONTX2 for DOS/V and
+# JEGA. A desktop install has them on disk; the sandbox has no disk, so they
+# travel in the binary and the driver writes them where they are looked for.
+FONTS = ['FREECG98.BMP', 'UnifontExMonoAnk.fontx2', 'UnifontExMonoKanji.fontx2']
+for fn in FONTS:
+    chunks.append(carray('font_' + fn.replace('.', '_'), open(os.path.join(fontdir, fn), 'rb').read()))
+chunks.append('static const struct { const char *name; const unsigned char *data; size_t len; } dosdrv_fonts[] = {')
+for fn in FONTS:
+    ident = 'font_' + fn.replace('.', '_')
+    chunks.append(f'\t{{ "{fn}", {ident}, sizeof {ident} }},')
 chunks.append('};')
 chunks.append('')
 

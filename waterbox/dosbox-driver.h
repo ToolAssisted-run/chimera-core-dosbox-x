@@ -57,6 +57,15 @@ struct DosDrvMachine {
 	std::vector<std::string> cdImages;
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
 	std::string bootDrive = "none"; // "a"/"c": boot that drive instead of the DOS shell
+	// Devices that are nothing without their ROM. Each file is a declared
+	// firmware, mounted in the work directory under the name DOSBox-X itself
+	// looks for; "auto"/false changes nothing, so an existing movie's machine
+	// is the machine it was recorded on.
+	std::string midiDevice = "auto"; // "mt32_old"/"mt32_new": MT32_*.ROM; "cm32l": CM32L_*.ROM
+	bool pc98FontRom = false;        // FONT.ROM instead of the built-in FREECG98
+	bool pc98SoundBios = false;      // SOUND.ROM, the -26K/-86 board's sound BIOS
+	bool ibmRomBasic = false;        // IBMBASIC.ROM below the BIOS
+	bool vgaBiosRom = false;         // VGABIOS.BIN instead of the generated video BIOS
 	std::string extraConf;   // appended last (a .conf rom's text)
 };
 

@@ -144,6 +144,12 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) m.memsizeMB = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) m.cpuCycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--boot-drive") && i + 1 < argc) m.bootDrive = argv[++i];
+		// the ROM-backed devices; the files come in through --extra-file NAME=PATH
+		else if (!strcmp(argv[i], "--midi") && i + 1 < argc) m.midiDevice = argv[++i];
+		else if (!strcmp(argv[i], "--pc98-font-rom")) m.pc98FontRom = true;
+		else if (!strcmp(argv[i], "--pc98-sound-bios")) m.pc98SoundBios = true;
+		else if (!strcmp(argv[i], "--ibm-rom-basic")) m.ibmRomBasic = true;
+		else if (!strcmp(argv[i], "--vga-bios-rom")) m.vgaBiosRom = true;
 		else if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
 		else if (!strcmp(argv[i], "--extra-conf") && i + 1 < argc) extraConfFile = argv[++i];
 		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);

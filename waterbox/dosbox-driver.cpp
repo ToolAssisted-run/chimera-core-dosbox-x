@@ -97,6 +97,23 @@ extern "C" const char *chimera_composed_conf()
 	return _composedConf.empty() ? nullptr : _composedConf.c_str();
 }
 
+// The free fonts DOSBox-X looks for by name (FREECG98.BMP for PC-98 text, Unifont
+// as FONTX2 for DOS/V and JEGA), served from the binary: the sandbox has no
+// writable file system to put them in. DOSBox-X asks here only after the work
+// directory (patches: int10.cpp, int_dosv.cpp), so a real NEC FONT.ROM - the
+// pc98FontRom firmware - or a font the user's conf names still wins.
+extern "C" FILE *chimera_bundled_file(const char *name)
+{
+	const char *base = strrchr(name, '/');
+	base = base ? base + 1 : name;
+	for (const auto &font : dosdrv_fonts)
+		if (strcmp(base, font.name) == 0)
+			return fmemopen(const_cast<unsigned char *>(font.data), font.len, "rb");
+	return nullptr;
+}
+
+static bool wantsDosvFonts(const DosDrvMachine &m) { return m.videoCardType == "jega" || m.extraConf.find("dosv") != std::string::npos; }
+
 std::string dosdrv_compose_conf(const DosDrvMachine &m)
 {
 	std::string conf((const char *)dosdrv_conf_base, dosdrv_conf_base_len);
@@ -167,6 +184,28 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	if (m.cpuType != "auto") conf += "cputype = " + m.cpuType + "\n";
 	conf += "\n[dosbox]\n";
 	if (m.videoCardType != "auto") conf += "machine = " + m.videoCardType + "\n";
+
+	// ---- devices that need their ROM (chimera additions; silent when unset,
+	// so a BizHawk movie's composition is byte for byte what it was) ---------
+	// Every path is the work directory: that is where a firmware is mounted,
+	// under the very name DOSBox-X looks for.
+	if (m.midiDevice != "auto") {
+		// munt renders on the emulation thread (mt32.thread = false in the
+		// base conf): a second thread would make the mix a race.
+		conf += "\n[midi]\nmpu401 = intelligent\nmididevice = mt32\nmt32.romdir = ./\n";
+		conf += std::string("mt32.model = ") + (m.midiDevice == "cm32l" ? "cm32l" : "mt32") + "\n";
+		conf += "mt32.thread = false\n";
+	}
+	if (m.pc98FontRom || m.pc98SoundBios) {
+		conf += "\n[pc98]\n";
+		if (m.pc98FontRom) conf += "pc-98 try font rom = true\n";
+		if (m.pc98SoundBios) conf += "pc-98 sound bios = true\npc-98 load sound bios rom file = true\n";
+	}
+	// before the user's conf, which may name fonts of its own
+	if (wantsDosvFonts(m))
+		conf += "\n[dosv]\nfontxsbcs16 = UnifontExMonoAnk.fontx2\nfontxdbcs = UnifontExMonoKanji.fontx2\n";
+	if (m.ibmRomBasic) conf += "\n[dosbox]\nibm rom basic = IBMBASIC.ROM\n";
+	if (m.vgaBiosRom) conf += "\n[video]\nvga bios use rom image = true\nvga bios rom image = VGABIOS.BIN\n";
 
 	if (!m.extraConf.empty()) {
 		conf += "\n";

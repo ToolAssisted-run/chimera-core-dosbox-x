@@ -229,6 +229,8 @@ ECL_EXPORT int Init(void)
 	int sbIRQ = (int)wbx_setting_double("soundBlasterIRQ", -1);
 	char bootDrive[8] = "none";
 	wbx_setting_str("bootDrive", bootDrive, sizeof bootDrive);
+	char midiDevice[16] = "auto";
+	wbx_setting_str("midiDevice", midiDevice, sizeof midiDevice);
 
 	DosDrvConfig cfg;
 	cfg.joystick1Enabled = g_joystick1Enabled;
@@ -246,6 +248,11 @@ ECL_EXPORT int Init(void)
 	m.soundBlasterModel = sbModel;
 	m.soundBlasterIRQ = sbIRQ;
 	m.bootDrive = bootDrive;
+	m.midiDevice = midiDevice;
+	m.pc98FontRom = wbx_setting_bool("pc98FontRom", 0) != 0;
+	m.pc98SoundBios = wbx_setting_bool("pc98SoundBios", 0) != 0;
+	m.ibmRomBasic = wbx_setting_bool("ibmRomBasic", 0) != 0;
+	m.vgaBiosRom = wbx_setting_bool("vgaBiosRom", 0) != 0;
 
 	// ---- what the loaded files ARE ----------------------------------------
 	if (slots.present) {

@@ -570,7 +570,8 @@ conf_assets = custom_target('conf-assets',
   input: files('waterbox/gen-assets.py'),
   command: [py, '@INPUT@', '@OUTPUT@',
             meson.current_source_dir() / 'waterbox/conf',
-            meson.current_source_dir() / 'waterbox/hdd'])
+            meson.current_source_dir() / 'waterbox/hdd',
+            meson.current_source_dir() / 'extern/dosbox-x/contrib/fonts'])
 
 driver_sources = files('waterbox/dosbox-driver.cpp') + [conf_assets]
 

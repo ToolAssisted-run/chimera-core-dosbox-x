@@ -153,6 +153,41 @@ VIDEO_CARDS = [
 SB_MODELS = ["auto", "none", "sb1", "sb2", "sbpro1", "sbpro2", "sb16",
              "sb16vibra", "gb", "ess688", "reveal_sc400"]
 
+# ---- firmware: every file a ROM-backed device opens -----------------------
+# The hashes are munt's own (extern/dosbox-x/src/libs/mt32/ROMInfo.cpp): it
+# refuses a ROM it does not know, so a wrong dump is said here, not there.
+def FW(id, display, description, size, name, sha1, label, when):
+    e = {"id": id, "display": display, "description": description, "size": size,
+         "name": name, "label": label, "requiredWhen": when}
+    if sha1: e["sha1"] = sha1
+    return e
+
+def midi_is(v): return {"setting": "midiDevice", "is": v}
+def flag(n): return {"setting": n, "is": True}
+ROLAND = "Dumped from a Roland unit you own. "
+FIRMWARE = [
+    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "First generation, v1.07.",
+       65536, "MT32_CONTROL.ROM", "B083518FFFB7F66B03C23B7EB4F868E62DC5A987", "MT-32 v1.07", midi_is("mt32_old")),
+    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "Second generation, v2.04.",
+       131072, "MT32_CONTROL.ROM", "2C16432B6C73DD2A3947CBA950A0F4C19D6180EB", "MT-32 v2.04", midi_is("mt32_new")),
+    FW("MT32_PCM.ROM", "Roland MT-32 PCM ROM", ROLAND + "The one PCM ROM every MT-32 has.",
+       524288, "MT32_PCM.ROM", "F6B1EEBC4B2D200EC6D3D21D51325D5B48C60252", "MT-32 PCM",
+       {"setting": "midiDevice", "in": ["mt32_old", "mt32_new"]}),
+    FW("CM32L_CONTROL.ROM", "Roland CM-32L control ROM", ROLAND + "CM-32L / LAPC-I, v1.02.",
+       65536, "CM32L_CONTROL.ROM", "A439FBB390DA38CADA95A7CBB1D6CA199CD66EF8", "CM-32L v1.02", midi_is("cm32l")),
+    FW("CM32L_PCM.ROM", "Roland CM-32L PCM ROM", ROLAND + "CM-32L / CM-64 / LAPC-I.",
+       1048576, "CM32L_PCM.ROM", "289CC298AD532B702461BFC738009D9EBE8025EA", "CM-32L PCM", midi_is("cm32l")),
+    FW("FONT.ROM", "PC-98 font ROM", "The character ROM of an NEC PC-98 you own: 8x8, 8x16 and the 16x16 kanji.",
+       288768, "FONT.ROM", None, "NEC PC-98 FONT.ROM", flag("pc98FontRom")),
+    FW("SOUND.ROM", "PC-98 sound BIOS", "The 16 KiB BIOS of a PC-9801-26K or -86 sound board you own.",
+       16384, "SOUND.ROM", None, "NEC PC-9801-26K/86 SOUND.ROM", flag("pc98SoundBios")),
+    FW("IBMBASIC.ROM", "IBM ROM BASIC", "The 32 KiB BASIC ROM set of an IBM 5150 you own, as one image for F6000h (often named IBMROMBASIC-F6000h-1982-10-27.ROM).",
+       32768, "IBMROMBASIC-F6000h-1982-10-27.ROM", None, "IBM BASIC C1.10", flag("ibmRomBasic")),
+    FW("VGABIOS.BIN", "Video BIOS", "The video BIOS of the card chosen in Video Card Type, 1 to 64 KiB, dumped from a card you own. DOSBox-X knows et4000.bin for svga_et4000 and the S3 Trio64 v1.5-07 BIOS for svga_s3.",
+       0, "et4000.bin", None, "Video BIOS", flag("vgaBiosRom")),  # size 0: any, a video BIOS is 1 to 64 KiB
+]
+
+
 config = {
     "coreName": "DOSBox-X",
     "systemId": "DOS",
@@ -265,8 +300,38 @@ config = {
             "description": "Boot the machine from a mounted drive instead of dropping to the DOS prompt: 'a' boots a bootable floppy image, 'c' boots an operating system installed on the hard disk. 'none' keeps the built-in DOS shell. (Chimera addition; BizHawk movies use 'none'.)",
             "type": "enum", "options": ["none", "a", "c"], "default": "none",
             "sync": True
+        },
+        # ---- devices that are nothing without their ROM (chimera additions;
+        # the defaults change nothing, so a BizHawk movie's machine is intact)
+        {
+            "name": "midiDevice", "display": "MIDI Device",
+            "description": "What is plugged into the MPU-401 MIDI port. 'auto' keeps the machine preset's own (no synthesizer). 'mt32_old' is a first-generation Roland MT-32 (control ROM v1.07), which the earliest Sierra titles rely on the quirks of; 'mt32_new' is the second generation (v2.04); 'cm32l' is a Roland CM-32L / LAPC-I (v1.02), the MT-32 with the extra sound effects later games use. Each needs its control and PCM ROM, dumped from a unit you own.",
+            "type": "enum", "options": ["auto", "mt32_old", "mt32_new", "cm32l"],
+            "default": "auto", "sync": True
+        },
+        {
+            "name": "pc98FontRom", "display": "PC-98 Font ROM",
+            "description": "Draw PC-98 text with a real NEC character ROM (FONT.ROM) instead of the built-in free font. Only meaningful with a pc98 video card type.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
+            "name": "pc98SoundBios", "display": "PC-98 Sound BIOS",
+            "description": "Map the PC-9801-26K/86 sound board's BIOS (SOUND.ROM) at CC000h. The FM board plays without it; games that call the sound BIOS do not. Only meaningful with a pc98 video card type.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
+            "name": "ibmRomBasic", "display": "IBM ROM BASIC",
+            "description": "Load IBM Cassette/ROM BASIC below the BIOS at F6000h, as an IBM 5150 has it. PC-DOS's BASICA needs it, and so does booting with no disk.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
+            "name": "vgaBiosRom", "display": "Video BIOS ROM",
+            "description": "Run a real video BIOS dumped from the card chosen in Video Card Type, instead of the one DOSBox-X generates. For software that probes the card's BIOS.",
+            "type": "bool", "default": False, "sync": True
         }
-    ]
+    ],
+    # Each id is the file name DOSBox-X itself opens, in the work directory.
+    "firmware": FIRMWARE
 }
 
 with open(os.path.join(HERE, 'waterbox.config'), 'w') as f:
