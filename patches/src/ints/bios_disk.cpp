@@ -4524,6 +4524,38 @@ imageDiskINT13Drive::~imageDiskINT13Drive() {
      hardDrive = true;   // this is only ever drive C:
      sector_size = 512;
      heads = 0; cylinders = 0; sectors = 0;
+
+     /* A PC-98 .hdi is a raw sector dump behind a header that carries the
+      * geometry, and the geometry is what the IPL1 partition table is written
+      * in - so the header is read the way the file-backed imageDisk reads it
+      * (above), and the disk's sectors start where the header ends. The name
+      * decides, as it does everywhere else in this file: the driver mounts an
+      * .hdi seed under "HardDiskDrive.hdi". */
+     const char *ext = imgName != NULL ? strrchr(imgName, '.') : NULL;
+     if (ext != NULL && !strcasecmp(ext, ".hdi")) {
+         HDIHDR hdihdr;
+         if (_sparse->read(0, &hdihdr, sizeof(hdihdr))) {
+             uint32_t ofs = host_readd(hdihdr.headersize);
+             uint32_t hddsize = host_readd(hdihdr.hddsize);
+             uint32_t sectorsize = host_readd(hdihdr.sectorsize);
+             if (sectorsize != 0 && ((sectorsize & (sectorsize - 1)) == 0) &&
+                 sectorsize >= 256 && sectorsize <= 1024 &&
+                 ofs != 0 && (ofs % sectorsize) == 0 && (ofs % 1024) == 0 &&
+                 hddsize >= sectorsize && (hddsize / 1024) <= (imgSizeK + 4)) {
+                 sector_size = sectorsize;
+                 image_base = ofs;
+                 image_length -= ofs;
+                 diskSizeK = (uint32_t)(image_length / 1024);
+                 sectors = host_readd(hdihdr.sectors);
+                 heads = host_readd(hdihdr.surfaces);
+                 cylinders = host_readd(hdihdr.cylinders);
+                 LOG_MSG("HDI (sparse): sectorsize %u, header %u bytes, geometry C/H/S %u/%u/%u",
+                     sectorsize, ofs, cylinders, heads, sectors);
+                 return;
+             }
+             LOG_MSG("HDI (sparse): header rejected. sectorsize=%u headersize=%u hddsize=%u", sectorsize, ofs, hddsize);
+         }
+     }
      Set_GeometryForHardDisk();
  }
 

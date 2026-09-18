@@ -249,7 +249,7 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 			conf += "imgmount d rom" + extras + " -t iso\n";
 		}
 	}
-	if (m.hddMounted) conf += "imgmount c HardDiskDrive.img\n";
+	if (m.hddMounted) conf += m.hddIsHdi ? "imgmount c HardDiskDrive.hdi\n" : "imgmount c HardDiskDrive.img\n";
 	if (m.bootDrive == "a" || m.bootDrive == "c") {
 		// the very last autoexec line: boot never returns to the shell
 		// (a chimera addition; BizHawk movies run with bootDrive none)
@@ -327,26 +327,57 @@ uint64_t dosdrv_formatted_disk(const std::string &name, const uint8_t **zst, siz
 // ---- the HDD memory file --------------------------------------------------
 #define FAT_SECTOR_SIZE 512
 static constexpr char writableHDDDstFile[] = "HardDiskDrive.img";
+// A PC-98 .hdi is mounted under a name that says so: DOSBox-X types a disk by
+// its extension - the header with the geometry is read, geometry detection is
+// skipped, the FAT layer knows it is a hard disk - and the exported save data
+// carries the same name, so it goes back into the hdd slot as what it is.
+static constexpr char writableHDDDstFileHdi[] = "HardDiskDrive.hdi";
 
 // The hard disk, seeded from a file the project mounted. Nothing is copied:
 // the image stays on the host and is read a chunk at a time as the machine
 // asks for it, and only WRITTEN chunks are held in guest memory. That is what
 // lets a disk be larger than the sandbox and what keeps a savestate to the size
 // of what changed rather than the size of the disk.
-static bool openHardDiskFromFile(const std::string &srcFile, uint64_t size)
+static bool openHardDiskFromFile(const std::string &srcFile, uint64_t size, bool hdi)
 {
 	if (size % FAT_SECTOR_SIZE > 0) {
 		fprintf(stderr, "Hard disk image has a non-sector (%d) divisible size: %llu\n",
 			FAT_SECTOR_SIZE, (unsigned long long)size);
 		return false;
 	}
+	if (hdi) {
+		// the header the disk layer will read (bios_disk.cpp, imageDisk_Sparse):
+		// refused here, with the reason, rather than mounted as a disk of no
+		// geometry that boots into nothing
+		uint8_t head[32] = { 0 };
+		FILE *f = fopen(srcFile.c_str(), "rb");
+		if (f == NULL || fread(head, 1, sizeof head, f) != sizeof head) {
+			if (f) fclose(f);
+			fprintf(stderr, "Could not read the .hdi header of %s\n", srcFile.c_str());
+			return false;
+		}
+		fclose(f);
+		auto le32 = [&](int at) { return (uint32_t)head[at] | ((uint32_t)head[at + 1] << 8) | ((uint32_t)head[at + 2] << 16) | ((uint32_t)head[at + 3] << 24); };
+		const uint32_t ofs = le32(8), hddsize = le32(12), sectorsize = le32(16);
+		if (sectorsize == 0 || (sectorsize & (sectorsize - 1)) != 0 || sectorsize < 256 || sectorsize > 1024
+			|| ofs == 0 || ofs % sectorsize != 0 || ofs % 1024 != 0 || hddsize < sectorsize || (uint64_t)hddsize + ofs > size + 4096) {
+			fprintf(stderr, "%s is not a PC-98 .hdi this core reads (header %u, sector %u, size %u)\n",
+				srcFile.c_str(), ofs, sectorsize, hddsize);
+			return false;
+		}
+		printf("PC-98 .hdi: %u-byte header, %u bytes/sector, C/H/S %u/%u/%u\n",
+			ofs, sectorsize, le32(28), le32(24), le32(20));
+	}
 	if (!_sparseHardDisk.openFile(srcFile, size)) {
 		fprintf(stderr, "Could not open hard disk image: %s\n", srcFile.c_str());
 		return false;
 	}
-	_sparseHardDiskName = writableHDDDstFile;
+	_sparseHardDiskName = hdi ? writableHDDDstFileHdi : writableHDDDstFile;
 	return true;
 }
+
+// the name the disk is mounted under, which is the name its export carries
+const char *dosdrv_hdd_name() { return _sparseHardDiskName.empty() ? writableHDDDstFile : _sparseHardDiskName.c_str(); }
 
 // ...and one of the package's own formatted disks, which is a small
 // decompressed head and then zeros all the way down. The zeros are not stored.
@@ -458,8 +489,8 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 		bool result;
 		if (!cfg.hddSeedFile.empty()) {
 			printf("Hard disk '%s' as '%s' (%llu bytes), read on demand\n",
-				cfg.hddSeedFile.c_str(), writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
-			result = openHardDiskFromFile(cfg.hddSeedFile, cfg.writableHDDImageSize);
+				cfg.hddSeedFile.c_str(), cfg.hddIsHdi ? writableHDDDstFileHdi : writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);
+			result = openHardDiskFromFile(cfg.hddSeedFile, cfg.writableHDDImageSize, cfg.hddIsHdi);
 		} else {
 			printf("Formatted hard disk '%s' (%llu bytes), zeros not stored\n",
 				writableHDDDstFile, (unsigned long long)cfg.writableHDDImageSize);

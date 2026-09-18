@@ -210,10 +210,11 @@ int main(int argc, char **argv)
 		std::vector<uint8_t> bytes;
 		if (!readWholeFile(rom, bytes)) { fprintf(stderr, "cannot read %s\n", rom); return 1; }
 		if (!writeWholeFile(std::string(workdir) + "/rom", bytes.data(), bytes.size())) return 1;
-		if (romExt == ".hdd") {
+		if (romExt == ".hdd" || romExt == ".hdi") {
 			cfg.hddSeedFile = "rom";
 			cfg.writableHDDImageSize = (bytes.size() + 511) / 512 * 512;
 			m.hddMounted = true;
+			cfg.hddIsHdi = m.hddIsHdi = romExt == ".hdi";
 		} else if (romExt == ".conf") {
 			m.extraConf.assign((const char *)bytes.data(), bytes.size());
 		} else {

@@ -136,6 +136,33 @@ instead of BizHawk's GetHDD* + ISaveRam-unregister + bespoke menu item; the
 (bringing an exported image back) is a mounted input like any other. The
 HDD also stays a memory domain, as in BizHawk.
 
+**PC-98 .hdi images (2026-09-18).** An Anex86 .hdi is a header and then the
+raw sectors: dummy, hddtype, headersize, hddsize, sectorsize, sectors,
+surfaces, cylinders, eight little-endian dwords, the header usually 4096
+bytes (verified on a 10,817,536-byte image: header 4096, 256 bytes a sector,
+33 sectors x 4 surfaces x 320 cylinders = 10,813,440). The geometry in it is
+what the IPL1 partition table is written in, so it has to reach the disk
+layer. DOSBox-X types a disk by its extension, and everything falls out of
+one name: a seed ending in .hdi is mounted as `HardDiskDrive.hdi`
+(`dosbox-driver.cpp`, `openHardDiskFromFile`, which also refuses a header it
+cannot read), IMGMOUNT then skips geometry detection, the FAT layer knows a
+hard disk when it sees one, and `imageDisk_Sparse` (`patches/src/ints/
+bios_disk.cpp`) reads the header out of the sparse base the way the
+file-backed `imageDisk` does - sector size, image base, C/H/S - so the
+overlay still works in whole-file offsets and a savestate carries only what
+was written. The export keeps the name (`dosdrv_hdd_name`), so a dumped disk
+goes back into the hdd slot as an .hdi. The slot accepts `hdi`; run-native
+and the rom path take one as they take an .hdd.
+
+Verified on a PC-98 hard-disk game: IPL1 found, MS-DOS 6.20 boots from the
+image to its banner and stops there - in CONFIG.SYS (HIMEM, EMM386) - and
+DOSBox-X's own file-backed HDI path stops at the identical frame hashes, so
+that is the machine, not the mount. From DOSBox-X's internal DOS instead
+(bootDrive none, a .conf slot with `c:` and the game's name under
+[autoexec]) the game runs to its attract screen; native == sandbox pictures
+at 300, 600 and 899, save+load around every frame identical at 599, the gate
+20 of 20. Booting the disk's own DOS is the open item, and it is upstream's.
+
 ### 7. CD-ROM: REPLACED - direct file mounts
 
 BizHawk's frontend owned disc parsing (DiscSystem), so the wbx branch added

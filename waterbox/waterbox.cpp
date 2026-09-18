@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <strings.h>
 #include <string>
 #include <vector>
 
@@ -312,6 +313,9 @@ ECL_EXPORT int Init(void)
 			cfg.hddSeedFile = slots.hdd[0];
 			cfg.writableHDDImageSize = (size + 511) / 512 * 512;
 			m.hddMounted = true;
+			// a PC-98 .hdi says so by name, and is mounted under a name that says so too
+			const size_t hn = slots.hdd[0].size();
+			cfg.hddIsHdi = m.hddIsHdi = hn > 4 && strcasecmp(slots.hdd[0].c_str() + hn - 4, ".hdi") == 0;
 		}
 		if (!slots.conf.empty()) {
 			// extra configuration, appended after everything the settings chose
@@ -326,7 +330,7 @@ ECL_EXPORT int Init(void)
 				return 0;
 			}
 		}
-	} else if (haveRom && romExt == ".hdd") {
+	} else if (haveRom && (romExt == ".hdd" || romExt == ".hdi")) {
 		// the file itself is the writable hard disk's seed
 		uint64_t size = 0;
 		if (FILE *f = fopen("rom", "rb")) {
@@ -340,6 +344,7 @@ ECL_EXPORT int Init(void)
 		cfg.hddSeedFile = "rom";
 		cfg.writableHDDImageSize = (size + 511) / 512 * 512;
 		m.hddMounted = true;
+		cfg.hddIsHdi = m.hddIsHdi = romExt == ".hdi";
 	} else if (haveRom && romExt == ".conf") {
 		// extra configuration, appended after everything the settings chose
 		if (FILE *f = fopen("rom", "rb")) {
@@ -667,7 +672,7 @@ ECL_EXPORT int GetMemoryDomainWritable(int i)
 static uint8_t g_saveDataWindow[SAVEDATA_WINDOW];
 
 ECL_EXPORT int32_t GetSaveDataFileCount(void) { return dosdrv_hdd_size() != 0 ? 1 : 0; }
-ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i == 0 ? "HardDiskDrive.img" : nullptr; }
+ECL_EXPORT const char *GetSaveDataFileName(int32_t i) { return i == 0 ? dosdrv_hdd_name() : nullptr; }
 ECL_EXPORT int64_t GetSaveDataFileSize(int32_t i) { return i == 0 ? (int64_t)dosdrv_hdd_size() : 0; }
 ECL_EXPORT const uint8_t *GetSaveDataFileBuffer(int32_t i) { (void)i; return nullptr; }
 

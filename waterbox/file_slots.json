@@ -22,8 +22,8 @@
       "title": "Hard disk",
       "min": 0,
       "max": 1,
-      "formats": ["hdd", "img"],
-      "help": "A raw hard disk image, mounted writable as drive C:. Writes persist for the session and can be exported as save data, and a previously exported image can be provided here to continue from it. Without one, the formattedHardDisk setting can create an empty disk instead."
+      "formats": ["hdd", "img", "hdi"],
+      "help": "A raw hard disk image, or a PC-98 .hdi (its header carries the disk's geometry), mounted writable as drive C:. Writes persist for the session and can be exported as save data, and a previously exported image can be provided here to continue from it. Without one, the formattedHardDisk setting can create an empty disk instead."
     },
     {
       "id": "conf",

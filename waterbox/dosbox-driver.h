@@ -26,6 +26,7 @@ struct DosDrvConfig {
 	// to writableHDDImageSize. Zero size = no hard disk.
 	uint64_t writableHDDImageSize = 0;
 	std::string hddSeedFile;              // "" = use the zst seed instead
+	bool hddIsHdi = false;                // the seed is a PC-98 .hdi: header, then sectors
 	const uint8_t *hddSeedZst = nullptr;  // a dosdrv_formatted_disk head
 	size_t hddSeedZstLen = 0;
 	// The composed dosbox-x.conf. When dosbox cannot open the file by name
@@ -56,6 +57,7 @@ struct DosDrvMachine {
 	std::vector<std::string> floppyImages;
 	std::vector<std::string> cdImages;
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
+	bool hddIsHdi = false;   // ...named HardDiskDrive.hdi: a PC-98 image whose header carries the geometry
 	std::string bootDrive = "none"; // "a"/"c": boot that drive instead of the DOS shell
 	// Devices that are nothing without their ROM. Each file is a declared
 	// firmware, mounted in the work directory under the name DOSBox-X itself
@@ -154,4 +156,5 @@ bool dosdrv_domain(int index, const char **name, uint8_t **data, uint64_t *size,
 // so the image is READ rather than pointed at - which is also what the
 // save-data export does to produce a whole mountable .hdd.
 uint64_t dosdrv_hdd_size();
+const char *dosdrv_hdd_name();  // "HardDiskDrive.img", or .hdi for a PC-98 image
 bool dosdrv_hdd_read(uint64_t offset, void *dst, size_t len);
