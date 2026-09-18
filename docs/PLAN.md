@@ -161,6 +161,24 @@ them all, and per-frame `DriveActions.insertFloppyDisk/insertCDROM` call
 frontend disc knowledge. `_driveUsed` per frame backs the drive light
 (IDriveLight survives in Chimera).
 
+**PC-98 .dcp dumps (2026-09-18).** DCP is a PC-98 image format DOSBox-X does
+not read: a 162-byte header - media type, 160 per-track "in the file" flags,
+an "every track" flag - then the present tracks back to back as plain sector
+runs; a track not in the file reads as 0xE5 (the layout Neko Project II
+accepts, its fdd_head_dcp.h). The core decodes one when it is OPENED:
+`chimera_dcp_open` (waterbox/dosbox-driver.cpp) builds the flat image in memory
+once per name - a mount and a boot share what they write - and `fopen_lock`
+(patches/src/dos/dos_programs.cpp) hands every open of that name an fmemopen
+over it. The result is byte for byte the raw image the disk would be as .hdm,
+which DOSBox-X types by size (1232K for the 1.25 MB format every PC-98 game
+disk is); media types 0x01-0x05 and 0x08 decode, the N88-BASIC ones are
+refused with a line. Verified on an eight-disk PC-98 game: all disks decode
+(154 of 154 tracks each), the machine boots to the game's FM-sound dialog
+and, keyed past it, into the publisher's logo; a swap to disk 2 at frame 400 and 600
+frames give native == sandbox digests; the gate is green. Note the harness
+convention: rom/rom2.. extras carry no extension, so a .dcp only decodes under
+its own name - the project's slot map, which is how the frontend mounts.
+
 ### 9. Configuration (KEEP composition, move declaration)
 
 BizHawk composed one config string: base conf + a machine-year preset

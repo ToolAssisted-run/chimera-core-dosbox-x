@@ -1978,7 +1978,11 @@ int IDE_MatchCDROMDrive(char drv);
 #endif
 #endif
 FILE *retfile = NULL;
+extern "C" FILE *chimera_dcp_open(const char *name, bool *readonly);
 FILE * fopen_lock(const char * fname, const char * mode, bool &readonly) {
+    /* chimera: a PC-98 .dcp dump is decoded into a flat image in memory and
+     * opened from there (waterbox/dosbox-driver.cpp, chimera_dcp_open) */
+    { FILE *dcp = chimera_dcp_open(fname, &readonly); if (dcp) return dcp; }
     std::string fmode = mode;
     if (lockmount && fmode.size()>1 && fmode.back()=='+') {
 #if defined(WIN32)

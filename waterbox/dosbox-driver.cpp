@@ -10,7 +10,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <set>
+#include <string>
 #include <vector>
 
 #include <jaffarCommon/file.hpp>
@@ -113,6 +115,81 @@ extern "C" FILE *chimera_bundled_file(const char *name)
 	return nullptr;
 }
 
+// ---- .dcp floppy images ----------------------------------------------------
+//
+// DCP is a PC-98 dump format (the "DiskCopy" of Japanese doujin/net dumps):
+// a 162-byte header - one byte of media type, 160 bytes of per-track "this
+// track is in the file" flags, one "every track is in the file" flag - and
+// then the tracks that are present, in order, as plain sector runs. A track
+// not in the file reads as 0xE5. Nothing in DOSBox-X reads it, and its sector
+// layer wants a flat image, so a .dcp is DECODED when it is opened: the flat
+// image is built once in memory (one buffer per name, so a mount and a boot
+// share what they write) and every open of that name is an fmemopen over it.
+// The result is exactly the raw image the same disk would be as .hdm, which
+// DOSBox-X types by size (1232K for the 1.25 MB format that every PC-98 game
+// disk is), and writes land in the buffer for the session. The layouts are
+// the ones Neko Project II accepts (fdd_head_dcp.h); the N88-BASIC ones
+// (0x11, 0x19, 0x21) are not DOS disks and are refused.
+namespace {
+struct DcpFormat { uint8_t media; uint16_t tracks; uint16_t sectors; uint16_t sectorSize; };
+const DcpFormat dcpFormats[] = {
+	{ 0x01, 154,  8, 1024 }, // 2HD  8 sectors, 1.25 MB - the PC-98 standard
+	{ 0x02, 160, 15,  512 }, // 2HD 15 sectors, 1.21 MB
+	{ 0x03, 160, 18,  512 }, // 2HQ 18 sectors, 1.44 MB
+	{ 0x04, 160,  8,  512 }, // 2DD  8 sectors, 640 KB
+	{ 0x05, 160,  9,  512 }, // 2DD  9 sectors, 720 KB
+	{ 0x08, 154,  9, 1024 }, // 2HD  9 sectors
+};
+const size_t DCP_HEADER = 162;
+std::map<std::string, std::vector<uint8_t>> _dcpImages;
+
+bool endsWithNoCase(const char *name, const char *ext)
+{
+	const size_t n = strlen(name), e = strlen(ext);
+	return n >= e && strcasecmp(name + n - e, ext) == 0;
+}
+} // namespace
+
+// fopen_lock (dos_programs.cpp) asks here first; NULL means "not a .dcp, open
+// it yourself". `readonly` is cleared: the decoded image takes writes.
+extern "C" FILE *chimera_dcp_open(const char *name, bool *readonly)
+{
+	if (name == NULL || !endsWithNoCase(name, ".dcp")) return NULL;
+	auto it = _dcpImages.find(name);
+	if (it == _dcpImages.end()) {
+		FILE *f = fopen(name, "rb");
+		if (f == NULL) return NULL;
+		uint8_t head[DCP_HEADER];
+		if (fread(head, 1, sizeof head, f) != sizeof head) { fclose(f); return NULL; }
+		const DcpFormat *fmt = NULL;
+		for (const DcpFormat &d : dcpFormats) if (d.media == head[0]) fmt = &d;
+		if (fmt == NULL) {
+			fprintf(stderr, "dcp: %s: media type 0x%02x is not a DOS disk this core reads\n", name, head[0]);
+			fclose(f);
+			return NULL;
+		}
+		const size_t trackSize = (size_t)fmt->sectors * fmt->sectorSize;
+		std::vector<uint8_t> image((size_t)fmt->tracks * trackSize, 0xE5);
+		const bool all = head[161] == 0x01;
+		size_t present = 0;
+		for (unsigned t = 0; t < fmt->tracks; t++) {
+			if (!all && head[1 + t] != 0x01) continue;
+			if (fread(image.data() + t * trackSize, 1, trackSize, f) != trackSize) {
+				fprintf(stderr, "dcp: %s: track %u is missing from the file\n", name, t);
+				fclose(f);
+				return NULL;
+			}
+			present++;
+		}
+		fclose(f);
+		fprintf(stderr, "dcp: %s: media 0x%02x, %zu of %u tracks in the file, %zu-byte image\n",
+			name, head[0], present, fmt->tracks, image.size());
+		it = _dcpImages.emplace(name, std::move(image)).first;
+	}
+	if (readonly) *readonly = false;
+	return fmemopen(it->second.data(), it->second.size(), "r+b");
+}
+
 static bool wantsDosvFonts(const DosDrvMachine &m) { return m.videoCardType == "jega" || m.extraConf.find("dosv") != std::string::npos; }
 
 std::string dosdrv_compose_conf(const DosDrvMachine &m)
@@ -164,7 +241,7 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		for (int32_t i = 0; i < m.extraImageCount; i++) {
 			extras += " rom" + std::to_string(i + 2);
 		}
-		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
+		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88", ".dcp" };
 		for (const char *e : floppyExts) {
 			if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; break; }
 		}
@@ -225,7 +302,7 @@ void dosdrv_media_counts(const DosDrvMachine &m, int32_t *floppies, int32_t *cds
 	} else {
 		/* the extras convention: the rom and rom2..romN all mount on ONE
 		 * drive, chosen by the rom's extension - the same test as above */
-		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88" };
+		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88", ".dcp" };
 		for (const char *e : floppyExts) {
 			if (m.romExt == e) { f = 1 + m.extraImageCount; break; }
 		}

@@ -6,8 +6,8 @@
       "title": "Floppy disks",
       "min": 0,
       "max": -1,
-      "formats": ["img", "ima", "xdf", "fdi", "hdm", "nfd", "d88"],
-      "help": "Raw floppy disk images (.img, .ima, .xdf, .fdi, .hdm, .nfd, .d88). The first one is in drive A: at boot; the order here is the swap order used by the Previous/Next/Swap Floppy Disk inputs."
+      "formats": ["img", "ima", "xdf", "fdi", "hdm", "nfd", "d88", "dcp"],
+      "help": "Floppy disk images (.img, .ima, .xdf, .fdi, .hdm, .nfd, .d88, and PC-98 .dcp dumps). The first one is in drive A: at boot; the order here is the swap order used by the Previous/Next/Swap Floppy Disk inputs."
     },
     {
       "id": "cdrom",
