@@ -243,53 +243,64 @@ ECL_EXPORT int Init(void)
 
 	// ---- settings (the frontend's channel; defaults match waterbox.config,
 	// which mirrors the author's BizHawk sync settings) ----------------------
-	char preset[128] = "1993_ibm_ps2_53_slc2_486";
-	wbx_setting_str("machinePreset", preset, sizeof preset);
 	char formatted[32] = "none";
 	wbx_setting_str("formattedHardDisk", formatted, sizeof formatted);
-	int memsizeMB = (int)wbx_setting_double("memsizeMB", -1);
-	int cpuCycles = (int)wbx_setting_double("cpuCycles", -1);
 	g_joystick1Enabled = wbx_setting_bool("joystick1Enabled", 1) != 0;
 	g_joystick2Enabled = wbx_setting_bool("joystick2Enabled", 1) != 0;
 	g_mouseEnabled = wbx_setting_bool("mouseEnabled", 1) != 0;
 	g_mouseSensitivity = (float)wbx_setting_double("mouseSensitivity", 3.0);
 	g_forceFPSNumerator = (int)wbx_setting_double("forceFPSNumerator", 0);
 	g_forceFPSDenominator = (int)wbx_setting_double("forceFPSDenominator", 0);
-	char cpuType[32] = "auto";
-	wbx_setting_str("cpuType", cpuType, sizeof cpuType);
-	char videoCard[48] = "auto";
-	wbx_setting_str("videoCardType", videoCard, sizeof videoCard);
-	char pcSpeaker[16] = "auto";
-	wbx_setting_str("pcSpeaker", pcSpeaker, sizeof pcSpeaker);
-	char sbModel[32] = "auto";
-	wbx_setting_str("soundBlasterModel", sbModel, sizeof sbModel);
-	int sbIRQ = (int)wbx_setting_double("soundBlasterIRQ", -1);
-	char bootDrive[8] = "none";
-	wbx_setting_str("bootDrive", bootDrive, sizeof bootDrive);
-	char midiDevice[16] = "auto";
-	wbx_setting_str("midiDevice", midiDevice, sizeof midiDevice);
-
 	DosDrvConfig cfg;
 	cfg.joystick1Enabled = g_joystick1Enabled;
 	cfg.joystick2Enabled = g_joystick2Enabled;
 
 	DosDrvMachine m;
-	m.machinePreset = preset;
 	m.joystick1 = g_joystick1Enabled;
 	m.joystick2 = g_joystick2Enabled;
-	m.memsizeMB = memsizeMB;
-	m.cpuCycles = cpuCycles;
-	m.cpuType = cpuType;
-	m.videoCardType = videoCard;
-	m.pcSpeaker = pcSpeaker;
-	m.soundBlasterModel = sbModel;
-	m.soundBlasterIRQ = sbIRQ;
-	m.bootDrive = bootDrive;
-	m.midiDevice = midiDevice;
-	m.pc98FontRom = wbx_setting_bool("pc98FontRom", 0) != 0;
-	m.pc98SoundBios = wbx_setting_bool("pc98SoundBios", 0) != 0;
-	m.ibmRomBasic = wbx_setting_bool("ibmRomBasic", 0) != 0;
-	m.vgaBiosRom = wbx_setting_bool("vgaBiosRom", 0) != 0;
+	// The machine, one declared setting at a time. Every field's initial value
+	// IS that setting's declared default (dosbox-driver.h), so a setting the
+	// frontend does not send leaves the grid's own default standing, and
+	// dosdrv_machine_setting is the one place that says what a name means -
+	// shared with run-native, which is what the gate compares against.
+	{
+		auto str = [&m](const char *name) {
+			char buf[64] = { 0 };
+			if (wbx_setting_str(name, buf, sizeof buf) > 0)
+				dosdrv_machine_setting(m, name, buf);
+		};
+		auto num = [&m](const char *name, double dflt) {
+			char buf[32];
+			snprintf(buf, sizeof buf, "%d", (int)wbx_setting_double(name, dflt));
+			dosdrv_machine_setting(m, name, buf);
+		};
+		auto flag = [&m](const char *name, int dflt) {
+			dosdrv_machine_setting(m, name, wbx_setting_bool(name, dflt) != 0 ? "true" : "false");
+		};
+		str("videoCardType");
+		num("memsizeMB", m.memsizeMB);
+		num("memsizeKB", m.memsizeKB);
+		str("cpuType");
+		num("cpuCycles", m.cpuCycles);
+		str("cpuCore");
+		str("soundBlasterModel");
+		num("soundBlasterIRQ", m.soundBlasterIRQ);
+		num("videoMemoryMB", m.videoMemoryMB);
+		num("vesaModelistWidthLimit", m.vesaWidthLimit);
+		num("vesaModelistHeightLimit", m.vesaHeightLimit);
+		str("dosVersion");
+		num("hardDriveDataRateLimit", m.hardDriveDataRate);
+		num("floppyDriveDataRateLimit", m.floppyDriveDataRate);
+		flag("int13FakeIo", m.int13FakeIo);
+		num("cdromInsertionDelayMs", m.cdromInsertionDelayMs);
+		str("pcSpeaker");
+		str("bootDrive");
+		str("midiDevice");
+		flag("pc98FontRom", 0);
+		flag("pc98SoundBios", 0);
+		flag("ibmRomBasic", 0);
+		flag("vgaBiosRom", 0);
+	}
 
 	// ---- what the loaded files ARE ----------------------------------------
 	if (slots.present) {

@@ -19,7 +19,7 @@
 
 #include "sparse-disk.h"
 
-#include "dosbox_conf_assets.h" // generated: conf presets + formatted disk heads
+#include "dosbox_conf_assets.h" // generated: base conf + formatted disk heads + fonts
 #include <zstd.h>
 
 // DOSBox-X internals (include paths per sources.mk)
@@ -196,26 +196,33 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 {
 	std::string conf((const char *)dosdrv_conf_base, dosdrv_conf_base_len);
 	conf += "\n";
-	for (size_t i = 0; i < sizeof dosdrv_conf_presets / sizeof dosdrv_conf_presets[0]; i++) {
-		if (m.machinePreset == dosdrv_conf_presets[i].name) {
-			conf.append((const char *)dosdrv_conf_presets[i].data, dosdrv_conf_presets[i].len);
-			conf += "\n";
-			break;
-		}
-	}
-	// The section order below mirrors the author's BizHawk integration
+	// base.conf and then the SETTINGS - nothing between them. There used to be
+	// a machine-preset .conf blob here, appended after base.conf and before
+	// these sections, which meant it overrode the user for every key the
+	// settings did not re-state. The presets are declared to the frontend now
+	// (waterbox.config "presets"), which resolves them into these very
+	// settings before the core is asked for anything.
+	//
+	// The section order below still mirrors the author's BizHawk integration
 	// (DOSBox.cs's configuration composition), so the same settings produce
-	// the same machine and a finished BizHawk movie stays convertible.
+	// the same machine and a finished BizHawk movie stays convertible; the
+	// sections the ex-preset keys need ([video], [dos], the disk controllers)
+	// had no counterpart there and go after them.
 	conf += "[joystick]\njoysticktype = ";
 	conf += (m.joystick1 || m.joystick2) ? "2axis\n" : "none\n";
 	conf += "[speaker]\n";
-	if (m.pcSpeaker == "disabled") conf += "pcspeaker = Disabled\n";
-	if (m.pcSpeaker == "enabled") conf += "pcspeaker = Enabled\n";
+	// base.conf's own spelling of this bool. The BizHawk composition wrote
+	// "Enabled"/"Disabled" here, which DOSBox-X's bool parser accepts as the
+	// same thing (Value::set_bool lowcases and takes enabled/disabled), but
+	// saying it the way the conf it overrides says it lets the composed text be
+	// compared against base.conf line for line.
+	conf += m.pcSpeaker == "disabled" ? "pcspeaker = false\n" : "pcspeaker = true\n";
 	conf += "\n[sblaster]\n";
-	if (m.soundBlasterModel != "auto") conf += "sbtype = " + m.soundBlasterModel + "\n";
+	conf += "sbtype = " + m.soundBlasterModel + "\n";
 	if (m.soundBlasterIRQ != -1) conf += "irq = " + std::to_string(m.soundBlasterIRQ) + "\n";
 	conf += "\n[dosbox]\n";
-	if (m.memsizeMB >= 0) conf += "memsize = " + std::to_string(m.memsizeMB) + "\n";
+	conf += "memsize = " + std::to_string(m.memsizeMB) + "\n";
+	conf += "memsizekb = " + std::to_string(m.memsizeKB) + "\n";
 
 	conf += "\n[autoexec]\n@echo off\n";
 	// what the loaded file IS: the frontend mounts it under the fixed name
@@ -258,16 +265,46 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 
 	// BizHawk emits [cpu] and the machine override AFTER the autoexec
 	conf += "\n[cpu]\n";
-	if (m.cpuCycles >= 0) conf += "cycles = " + std::to_string(m.cpuCycles) + "\n";
-	if (m.cpuType != "auto") conf += "cputype = " + m.cpuType + "\n";
+	// ALWAYS a fixed count. DOSBox-X's own "auto" and "max" chase the host's
+	// speed, which is a different machine on every PC and not a machine a movie
+	// can be replayed on.
+	conf += "cycles = fixed " + std::to_string(m.cpuCycles) + "\n";
+	conf += "cputype = " + m.cpuType + "\n";
+	conf += "core = " + m.cpuCore + "\n";
 	conf += "\n[dosbox]\n";
-	if (m.videoCardType != "auto") conf += "machine = " + m.videoCardType + "\n";
+	conf += "machine = " + m.videoCardType + "\n";
+
+	// ---- the rest of the machine the ten presets describe -------------------
+	conf += "\n[video]\n";
+	conf += "vmemsize = " + std::to_string(m.videoMemoryMB) + "\n";
+	conf += "vesa modelist width limit = " + std::to_string(m.vesaWidthLimit) + "\n";
+	conf += "vesa modelist height limit = " + std::to_string(m.vesaHeightLimit) + "\n";
+	conf += "\n[dos]\n";
+	// "auto" is what an unset ver means, so it is left unset rather than
+	// spelled out - base.conf's own empty value already says it.
+	if (m.dosVersion != "auto") conf += "ver = " + m.dosVersion + "\n";
+	conf += "hard drive data rate limit = " + std::to_string(m.hardDriveDataRate) + "\n";
+	conf += "floppy drive data rate limit = " + std::to_string(m.floppyDriveDataRate) + "\n";
+	{
+		// One setting, five keys: Windows 3.11's and Windows 95's 32-bit disk
+		// access needs the BIOS calls to move the controllers' registers and
+		// raise v86-mode traps, on the IDE channels and on the floppy
+		// controller alike. Nothing else in DOSBox-X reads them.
+		const char *f = m.int13FakeIo ? "true" : "false";
+		conf += "\n[fdc, primary]\nint13fakev86io = " + std::string(f) + "\n";
+		conf += "\n[ide, primary]\nint13fakeio = " + std::string(f) + "\n";
+		conf += "int13fakev86io = " + std::string(f) + "\n";
+		conf += "\n[ide, secondary]\nint13fakeio = " + std::string(f) + "\n";
+		conf += "int13fakev86io = " + std::string(f) + "\n";
+		// the CD-ROM lives on the secondary channel, as it did on the hardware
+		conf += "cd-rom insertion delay = " + std::to_string(m.cdromInsertionDelayMs) + "\n";
+	}
 
 	// ---- devices that need their ROM (chimera additions; silent when unset,
 	// so a BizHawk movie's composition is byte for byte what it was) ---------
 	// Every path is the work directory: that is where a firmware is mounted,
 	// under the very name DOSBox-X looks for.
-	if (m.midiDevice != "auto") {
+	if (m.midiDevice != "none") {
 		// munt renders on the emulation thread (mt32.thread = false in the
 		// base conf): a second thread would make the mix a race.
 		conf += "\n[midi]\nmpu401 = intelligent\nmididevice = mt32\nmt32.romdir = ./\n";
@@ -291,6 +328,45 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		conf += "\n";
 	}
 	return conf;
+}
+
+// ONE table of what a declared setting name means, so the guest's settings
+// channel and run-native's --setting cannot disagree about a machine. A value
+// arrives as text because that is what both sides have; the declaration
+// (waterbox.config) is what typed and bounded it before it got here.
+bool dosdrv_machine_setting(DosDrvMachine &m, const std::string &name, const std::string &value)
+{
+	auto asInt = [&](int32_t &dst) { dst = (int32_t)strtol(value.c_str(), nullptr, 10); return true; };
+	auto asBool = [&](bool &dst) {
+		dst = value == "true" || value == "True" || value == "1";
+		return true;
+	};
+	if (name == "videoCardType") { m.videoCardType = value; return true; }
+	if (name == "memsizeMB") return asInt(m.memsizeMB);
+	if (name == "memsizeKB") return asInt(m.memsizeKB);
+	if (name == "cpuType") { m.cpuType = value; return true; }
+	if (name == "cpuCycles") return asInt(m.cpuCycles);
+	if (name == "cpuCore") { m.cpuCore = value; return true; }
+	if (name == "soundBlasterModel") { m.soundBlasterModel = value; return true; }
+	if (name == "soundBlasterIRQ") return asInt(m.soundBlasterIRQ);
+	if (name == "videoMemoryMB") return asInt(m.videoMemoryMB);
+	if (name == "vesaModelistWidthLimit") return asInt(m.vesaWidthLimit);
+	if (name == "vesaModelistHeightLimit") return asInt(m.vesaHeightLimit);
+	if (name == "dosVersion") { m.dosVersion = value; return true; }
+	if (name == "hardDriveDataRateLimit") return asInt(m.hardDriveDataRate);
+	if (name == "floppyDriveDataRateLimit") return asInt(m.floppyDriveDataRate);
+	if (name == "int13FakeIo") return asBool(m.int13FakeIo);
+	if (name == "cdromInsertionDelayMs") return asInt(m.cdromInsertionDelayMs);
+	if (name == "pcSpeaker") { m.pcSpeaker = value; return true; }
+	if (name == "bootDrive") { m.bootDrive = value; return true; }
+	if (name == "midiDevice") { m.midiDevice = value; return true; }
+	if (name == "pc98FontRom") return asBool(m.pc98FontRom);
+	if (name == "pc98SoundBios") return asBool(m.pc98SoundBios);
+	if (name == "ibmRomBasic") return asBool(m.ibmRomBasic);
+	if (name == "vgaBiosRom") return asBool(m.vgaBiosRom);
+	if (name == "joystick1Enabled") return asBool(m.joystick1);
+	if (name == "joystick2Enabled") return asBool(m.joystick2);
+	return false;
 }
 
 void dosdrv_media_counts(const DosDrvMachine &m, int32_t *floppies, int32_t *cds)

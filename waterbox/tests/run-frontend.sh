@@ -119,12 +119,17 @@ else
 fi
 
 # --- a machine-shaping sync setting must reach the guest ---
-settings_config "$work/config.cga.ini" '{"machinePreset": "1983_ibm_xt5160"}'
+# The values of the 1983 IBM XT 5160 PRESET, written into the settings exactly
+# as the wizard's Apply writes them (tools/preset-args.py resolves the same
+# declaration the wizard reads) - there is no preset setting for the guest to
+# resolve for itself any more, so what travels here is the settings themselves.
+python3 "$here/preset-settings.py" "$wb/waterbox.config" 1983_ibm_xt5160 > "$work/preset.json"
+settings_config "$work/config.cga.ini" "$(cat "$work/preset.json")"
 if run_frontend "cga" "$work/config.cga.ini" 60; then
 	h1="$(grep '^ramhash=' "$work/base.meta.txt" | cut -d= -f2)"
 	h2="$(grep '^ramhash=' "$work/cga.meta.txt" | cut -d= -f2)"
 	if [ -n "$h2" ] && [ "$h1" != "$h2" ]; then
-		report "settings:preset" PASS "machinePreset=1983_ibm_xt5160 booted a different machine"
+		report "settings:preset" PASS "the 1983_ibm_xt5160 preset's values booted a different machine"
 	else
 		report "settings:preset" FAIL "RAM hash did not change (h1=$h1 h2=$h2)"
 	fi

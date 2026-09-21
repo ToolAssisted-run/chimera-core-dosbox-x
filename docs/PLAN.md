@@ -213,12 +213,17 @@ BizHawk composed one config string: base conf + a machine-year preset
 memsize/cpu (cycles, type)/video-card sections + autoexec (@echo off,
 imgmount lines) + user-provided .conf files, passed to the guest as a
 mounted file. Chimera: identical composition, but the KNOBS are declared
-in `waterbox.config` settings (machine preset, formatted-HDD choice, CPU
-cycles/type, RAM size, video card, sound blaster model/IRQ, PC speaker,
-joysticks, mouse sensitivity) so the settings dialog is generated and
-movies carry them as sync settings. The base/preset .conf resources are
-copied from the BizHawk tree into this repo's `waterbox/conf/` (author's
-own work). A user .conf can still ride along as an input file.
+in `waterbox.config` settings (formatted-HDD choice, CPU cycles/type/core,
+RAM size, video card and video memory, sound blaster model/IRQ, PC speaker,
+joysticks, mouse sensitivity, and the Windows-era disk knobs) so the
+settings dialog is generated and movies carry them as sync settings. The
+base .conf resource is copied from the BizHawk tree into this repo's
+`waterbox/conf/` (author's own work). A user .conf can still ride along as
+an input file.
+
+**The machine-year presets are no longer a conf blob (2026-09-21).** See
+"Configuration presets" below: they are declared presets the frontend
+resolves into settings, and base.conf is the only .conf the core embeds.
 
 ### 10. What stays disabled (KEEP disabling)
 
@@ -242,6 +247,153 @@ own work). A user .conf can still ride along as an input file.
 - Uninitialized-RAM policy, `rand()` seeding, and FPU determinism: the
   BizHawk port is the witness that these were already tamed; the gate
   re-proves it here (native == sandbox on every digest).
+
+## Configuration presets (2026-09-21)
+
+The ten machines used to be a SETTING. `machinePreset` ("Configuration
+Preset", ten options) was resolved by the core at boot: `dosdrv_compose_conf`
+appended `waterbox/conf/dosbox-x.<year>.<model>.conf` after base.conf and
+BEFORE the sections it built from settings, so the preset silently outranked
+the user for every key the settings did not re-state. Seven settings then had
+to document themselves as "Auto uses the configuration preset's default", the
+grid stopped saying what the machine was, and a movie recorded a preset NAME
+whose meaning the next core build could change under it.
+
+They are now declared PRESETS (chimera `docs/project.md`, "Configuration
+presets"): `waterbox.config` carries a top-level `presets` list, the wizard
+shows a selector and an Apply button above the settings grid, and **Apply
+writes the values into the settings and is then finished with the preset**.
+The project pins the resolved values; nothing records a preset name. The core
+knows nothing about presets at all: `dosdrv_compose_conf` is base.conf plus
+what the settings say, and nothing else.
+
+### The three-way decision, key by key
+
+Every key that differs between a machine `.conf` and `dosbox-x.base.conf`.
+(a) = maps onto a setting that already existed, (b) = a new setting was added
+for it, (c) = stays in base.conf.
+
+| conf key | section | base | what the machines want | decision |
+| --- | --- | --- | --- | --- |
+| `cputype` | cpu | auto | 8086, 80186, 286, 386, 486, pentium_ii, pentium_iii | (a) `cpuType` |
+| `cycles` | cpu | auto | fixed 315 ... fixed 200000 | (a) `cpuCycles` |
+| `core` | cpu | auto | normal (all ten) | (b) `cpuCore` |
+| `sbtype` | sblaster | sb16 | none, gb, sb1, sb2, sbpro2, sb16, sb16vibra | (a) `soundBlasterModel` |
+| `machine` | dosbox | svga_s3 | mda, cga, ega, mcga, svga_s3, svga_s3trio64 | (a) `videoCardType` |
+| `memsize` | dosbox | 16 | 0, 1, 4, 6, 32, 64, 96, 128 | (a) `memsizeMB` |
+| `memsizekb` | dosbox | 0 | 256, 640 | (b) `memsizeKB` |
+| `vmemsize` | video | -1 | 8, 16 | (b) `videoMemoryMB` |
+| `vesa modelist width limit` | video | 1280 | 0 | (b) `vesaModelistWidthLimit` |
+| `vesa modelist height limit` | video | 1024 | 0 | (b) `vesaModelistHeightLimit` |
+| `ver` | dos | (unset) | 7.1 | (b) `dosVersion` |
+| `hard drive data rate limit` | dos | -1 | 0 | (b) `hardDriveDataRateLimit` |
+| `floppy drive data rate limit` | dos | -1 | 0 | (b) `floppyDriveDataRateLimit` |
+| `int13fakev86io` | fdc, primary | false | true | (b) `int13FakeIo` |
+| `int13fakeio` | ide, primary | false | true | (b) `int13FakeIo` |
+| `int13fakev86io` | ide, primary | false | true | (b) `int13FakeIo` |
+| `int13fakeio` | ide, secondary | false | true | (b) `int13FakeIo` |
+| `int13fakev86io` | ide, secondary | false | true | (b) `int13FakeIo` |
+| `cd-rom insertion delay` | ide, secondary | 0 | 4000 | (b) `cdromInsertionDelayMs` |
+| `Name` | ExtraInfo | - | the machine's own label | (c) - see below |
+
+**The (c) list is one entry.** `[ExtraInfo] Name=` is not a DOSBox-X section
+at all (there is no `ExtraInfo` in `dosbox.cpp`); it was the .conf file's
+label for itself, and the preset's own `label` and `description` carry that
+now. Nothing else was judged "not the user's business": every key the ten
+machines set is reachable in the grid.
+
+`int13FakeIo` is one setting for five keys, because the five are one feature
+(Windows 3.11's and Windows 95's 32-bit disk access, which needs the BIOS
+calls to move both IDE channels' and the floppy controller's registers and
+raise v86-mode traps). Its description names all five. Splitting them would
+offer four choices with no meaning apart from each other.
+
+### What the "auto" options became
+
+- `cpuType`: keeps `auto`, which is a real DOSBox-X value ("pick the type
+  that suits the machine"). Default is now `486`.
+- `videoCardType`, `soundBlasterModel`: `auto` was NOT a legal DOSBox-X value
+  for `machine` or `sbtype` (`machines[]` and `sbtypes[]` in `dosbox.cpp` do
+  not contain it) - it only ever meant "leave it to the preset". Removed.
+  Defaults `svga_s3` and `sbpro2`.
+- `cpuCycles`: `-1` meant "the preset's". Now a plain count, default 22000,
+  and the composition ALWAYS writes `cycles = fixed N`: DOSBox-X's own `auto`
+  and `max` chase the host's speed, which is a different machine on every PC
+  and not one a movie can be replayed on.
+- `memsizeMB`: `-1` meant "the preset's". Now a real size, default 32,
+  minimum 0 (a pre-1987 PC's memory is `memsizeKB` alone).
+- `pcSpeaker`: `auto` only ever meant base.conf's `true`. Options are now
+  `disabled`/`enabled`, default `enabled`; a stale `auto` in an old project
+  coerces to the default, which is the machine it already had.
+- `midiDevice`: `auto` is renamed `none` and says what it is - nothing
+  plugged into the MPU-401 port, which is how all ten machines shipped.
+- `cpuCore` offers `normal`/`full`/`simple` and not DOSBox-X's `auto`: the
+  recompiling cores are not compiled in (section 10), so `auto` would be a
+  no-op option that looks like a choice.
+
+Every one of these defaults is the 1993 IBM PS/2 53's value, which was the
+default `machinePreset` - so a fresh project's machine is unchanged.
+
+### The OS configs
+
+`conf/dosbox-x.osconfig.{dos,windows95,windows98,windowsXP}.conf` are a second
+axis in the author's BizHawk integration. **Nothing in this repo ever read
+them**: `gen-assets.py` skipped any file with `osconfig` in the name, so they
+were never embedded and `dosdrv_compose_conf` never saw one. They are not a
+conf applied last here; they are dead files.
+
+Their content decides the rest. `osconfig.dos.conf` is empty.
+`osconfig.windows95.conf` and `osconfig.windows98.conf` are byte-identical to
+each other, and their whole content - the `[video]`, `[dos]`, `[fdc]`, `[ide]`
+block plus `cputype=pentium_mmx` and `sbtype=sb16vibra` - is already inside
+the 1997 Aptiva and 1999 Thinkpad machine .confs. `osconfig.windowsXP.conf` is
+the same block with `cputype=pentium_iii` and `cycles=fixed 400000`.
+
+So the decision is **their differing keys become settings**, which is the same
+decision the table above already forced: every key they set is now a real
+setting. The axis is preserved without a second mechanism - "the 1999
+Thinkpad, but at Windows XP's 400,000 cycles" is the 1999 preset and one edit
+to CPU Cycles, in the grid, where it can be read. No extra presets were
+invented for combinations that are already machines. The four files stay in
+`conf/` as the authored reference.
+
+### Proving the machines survived
+
+Three things, in order of strength.
+
+1. **Boot digests, before and after.** For each of the ten presets, 200 frames
+   through run-native: video hash, audio hash and all five memory domain
+   hashes, from the build with the preset blob (`--preset <id>`) and from the
+   build with the preset resolved into settings (`tools/preset-args.py`).
+   **All ten byte-identical**, and all ten distinct from each other - so the
+   comparison is not vacuously comparing ten copies of one machine.
+2. **Effective configuration, before and after.** The composed conf from each
+   build, parsed the way DOSBox-X parses it (sections, `key = value`, last
+   assignment wins) and compared as a map: **0 differences on all ten**. One
+   cosmetic difference was found and removed on the way - the composition used
+   to write `pcspeaker = Enabled`, the BizHawk spelling, where base.conf says
+   `true`; `Value::set_bool` treats them identically, but writing base.conf's
+   own spelling lets the two texts be compared line for line.
+3. **A permanent gate leg**, `tools/check-preset-machines.py`, so this cannot
+   rot: the ten .conf files stay in `conf/` and each preset's composed machine
+   is compared against `base.conf + that .conf`, in both directions, over
+   every key any .conf touches. A preset that stops producing its machine goes
+   red. Negative control: dropping the `core =` line from the composition
+   turned all ten red; putting a wrong `cpuType` into one preset and clearing
+   `int13FakeIo` in another turned exactly those two red, naming the keys.
+
+`tools/check-presets.py` is the declaration check the frontend cannot do for
+itself (a `values` key that is not a setting is ignored, and a value outside a
+setting's options is coerced to the default - both invisible in a machine that
+booted). It runs in the gate and in `build-package.sh`. Negative control: a
+typo'd name, an illegal enum value, an out-of-range int, a non-bool for a
+bool, a duplicate id and a missing description were each detected, and each
+named.
+
+Not established: the wizard's selector itself was not seen on screen. The
+frontend side was implemented and committed separately (chimera 8125d43); what
+is proven here is that the declaration is legal, that the package loads with
+it, and that the values a preset writes produce the machine they used to.
 
 ## The build (chimera-core-ppsspp shape)
 
@@ -400,10 +552,12 @@ build/meson-native` produces run-native. Patches overlay at every
 - [ ] M4: HDD memfile + savedata export group + gate leg (a .com writes
       C:\SAVE.DAT; export trees must match everywhere).
 - [x] M5: the Chimera package (2026-08-25). The guest COMPOSES its own
-      dosbox-x.conf from the settings channel (machinePreset,
-      formattedHardDisk, memsizeMB, cpuCycles, joysticksEnabled,
-      mouseSensitivity) using conf presets and formatted-disk heads
-      embedded at build time (gen-assets.py); a small setup.cpp patch
+      dosbox-x.conf from the settings channel (formattedHardDisk,
+      memsizeMB, cpuCycles, joysticksEnabled, mouseSensitivity and the
+      rest of the machine; machinePreset was one of them until
+      2026-09-21, see "Configuration presets") using the base conf and
+      formatted-disk heads embedded at build time (gen-assets.py); a
+      small setup.cpp patch
       lets ParseConfigFile read the composed text from memory when no
       real file exists, so run-native (which stages a work directory)
       and the frontend (which mounts nothing but rom+settings) reach

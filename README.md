@@ -25,12 +25,17 @@ round-trips around every frame. What the machine has:
 - **Live disk swapping**: extra images mount as a swap list (`rom2..romN`)
   and the disk-swap input controls cycle floppies and CDs at runtime.
 - **Machine presets**: ten machine-year configurations (1981 IBM XT 5150 to
-  1999 IBM ThinkPad 240) plus RAM size, CPU cycles and blank pre-formatted
-  FAT16 hard disks, all as declared sync settings that movies record.
+  1999 IBM ThinkPad 240), declared as presets the project wizard applies -
+  Apply writes the machine into the settings grid, where every value can be
+  read and changed afterwards, and the project pins the values rather than a
+  preset name. The machine itself is sync settings throughout: CPU type,
+  cycles and core, RAM, video card and video memory, sound card, and the
+  disk behaviour a Windows 9x install needs, plus blank pre-formatted FAT16
+  hard disks.
 - **Dynamic video**: the frame follows the DOS mode (720x400 text, CGA
   640x400, VGA and beyond) up to a 1024x768 buffer.
 
-The equivalence gate (`waterbox/run-gate.sh`) runs ten legs in about a minute,
+The equivalence gate (`waterbox/run-gate.sh`) runs over twenty legs in about two minutes,
 each proving native == sandbox == savestate-rerecord and, where input is
 involved, that the input visibly shaped the machine (a hollow pass cannot
 sneak through). Its content is entirely machine-generated: hand-rolled

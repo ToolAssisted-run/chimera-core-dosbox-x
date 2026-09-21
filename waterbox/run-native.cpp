@@ -3,8 +3,8 @@
 // guest reads from its settings channel, so the two builds run byte-identical
 // configuration by construction.
 //
-// usage: run-native [--workdir DIR] [--preset NAME] [--formatted-hdd NAME]
-//                   [--memsize MB] [--cycles N] [--joysticks]
+// usage: run-native [--workdir DIR] [--setting NAME=VALUE]... [--formatted-hdd NAME]
+//                   [--joysticks] [--boot-drive a|c]
 //                   [--rom FILE] [--extra-conf FILE] [--autoexec LINE]...
 //                   [--frames N] [--gate] [--verbose]
 //                   [--dump-video PREFIX] [--type TEXT] [--savedata-out DIR]
@@ -139,10 +139,21 @@ int main(int argc, char **argv)
 	DosDrvMachine m;
 
 	for (int i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "--preset") && i + 1 < argc) m.machinePreset = argv[++i];
+		// The general door: any DECLARED setting, by its declared name, exactly
+		// as run-wbx takes it - so the gate can drive the two builds with the
+		// same words, and so a preset can be resolved into settings the way the
+		// frontend's Apply resolves it (tools/preset-args.py).
+		if (!strcmp(argv[i], "--setting") && i + 1 < argc) {
+			std::string kv = argv[++i];
+			size_t eq = kv.find('=');
+			if (eq == std::string::npos) { fprintf(stderr, "--setting wants NAME=VALUE\n"); return 2; }
+			std::string name = kv.substr(0, eq), value = kv.substr(eq + 1);
+			if (!dosdrv_machine_setting(m, name, value)) {
+				fprintf(stderr, "--setting %s: no such setting\n", name.c_str());
+				return 2;
+			}
+		}
 		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
-		else if (!strcmp(argv[i], "--memsize") && i + 1 < argc) m.memsizeMB = atoi(argv[++i]);
-		else if (!strcmp(argv[i], "--cycles") && i + 1 < argc) m.cpuCycles = atoi(argv[++i]);
 		else if (!strcmp(argv[i], "--boot-drive") && i + 1 < argc) m.bootDrive = argv[++i];
 		// the ROM-backed devices; the files come in through --extra-file NAME=PATH
 		else if (!strcmp(argv[i], "--midi") && i + 1 < argc) m.midiDevice = argv[++i];
@@ -182,11 +193,6 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
 		else if (!strcmp(argv[i], "--joysticks")) { m.joystick1 = true; m.joystick2 = true; }
 		else if (!strcmp(argv[i], "--no-joysticks")) { m.joystick1 = false; m.joystick2 = false; }
-		else if (!strcmp(argv[i], "--cpu-type") && i + 1 < argc) m.cpuType = argv[++i];
-		else if (!strcmp(argv[i], "--video-card") && i + 1 < argc) m.videoCardType = argv[++i];
-		else if (!strcmp(argv[i], "--pc-speaker") && i + 1 < argc) m.pcSpeaker = argv[++i];
-		else if (!strcmp(argv[i], "--sb-model") && i + 1 < argc) m.soundBlasterModel = argv[++i];
-		else if (!strcmp(argv[i], "--sb-irq") && i + 1 < argc) m.soundBlasterIRQ = atoi(argv[++i]);
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
 

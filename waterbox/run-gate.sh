@@ -114,31 +114,75 @@ else
 	echo "PASS hdd ($hddframes frames, settings-mounted disk, typed DOS write, native==sandbox==rerecord, savedata trees identical)"
 fi
 
-# ---- the machine-preset leg ------------------------------------------------
-# A different machine year must produce a DIFFERENT machine (the setting
-# reaches both builds), and the two builds must still agree on it.
-nat="$(timeout 600 "$rn" --workdir "$work/cga" --preset 1983_ibm_xt5160 --frames "$frames" --gate 2>/dev/null | digests)"
-box="$(timeout 900 "$rw" "$core" --preset 1983_ibm_xt5160 --frames "$frames" 2>/dev/null | digests)"
-base="$(timeout 600 "$rn" --workdir "$work/base2" --frames "$frames" --gate 2>/dev/null | digests)"
-if [ -z "$nat" ] || [ -z "$box" ]; then
-	echo "FAIL preset (a run produced no digests)"; fail=1
-elif [ "$nat" != "$box" ]; then
-	echo "FAIL preset (native vs sandbox on 1983_ibm_xt5160)"
-	echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
-elif [ "$nat" = "$base" ]; then
-	echo "FAIL preset (the machine preset did not change the machine)"; fail=1
+# ---- the declaration is legal ----------------------------------------------
+# The ten machines are declared PRESETS: maps of setting values the wizard
+# writes into the grid (chimera docs/project.md, "Configuration presets"). A
+# `values` key that is not a declared setting is IGNORED by the frontend, and a
+# value outside a setting's options is silently coerced to the default - neither
+# is visible in a machine that booted, so both are caught here instead.
+if python3 "$root/tools/check-presets.py" "$here/waterbox.config" > "$work/presets.log" 2>&1; then
+	echo "PASS presets:declaration ($(tail -1 "$work/presets.log"))"
 else
-	echo "PASS preset (1983_ibm_xt5160: a different machine, and both builds agree on it)"
+	echo "FAIL presets:declaration ($(grep -m1 BAD "$work/presets.log"))"; fail=1
 fi
+
+# ---- the presets still produce the machines they used to -------------------
+# The most important leg of the conversion. Each machine was a .conf file the
+# core appended to base.conf at boot; those files stay in conf/ as the
+# reference, and this composes the machine from the PRESET'S SETTINGS instead
+# and compares the effective configuration key by key, in both directions.
+# A preset that quietly stopped producing its machine still boots and still
+# looks like DOS, which is exactly why it needs a leg of its own.
+if timeout 1800 python3 "$root/tools/check-preset-machines.py" "$rn" "$here/waterbox.config" \
+   "$here/conf" "$work/presetmachines" > "$work/presetmachines.log" 2>&1; then
+	echo "PASS presets:machines ($(tail -1 "$work/presetmachines.log"))"
+else
+	echo "FAIL presets:machines ($(grep -m1 BAD "$work/presetmachines.log"))"
+	grep BAD "$work/presetmachines.log" | head -10; fail=1
+fi
+
+# ---- the machine-preset leg ------------------------------------------------
+# An applied preset must produce a DIFFERENT machine from the default one (its
+# values reach both builds), and the two builds must still agree on it. The
+# arguments come from the DECLARATION, resolved the way the wizard's Apply
+# resolves it, so this runs the preset a user would get and not a copy of it.
+#
+# TWO of them, at the two ends of the list, because they do not exercise the
+# same settings: the 1983 XT is the only shape where RAM Size (KB) carries the
+# whole memory size, and the 1997 Aptiva is the only shape that turns on the
+# ex-preset keys the Windows era needs (video memory, the VESA mode list caps,
+# the reported DOS version, the disk data rates, the INT 13h faking, the CD
+# insertion delay). Between them every value the conversion moved out of a
+# .conf file travels through the guest's own settings channel at least once.
+base="$(timeout 600 "$rn" --workdir "$work/base2" --frames "$frames" --gate 2>/dev/null | digests)"
+prev=""
+for preset in 1983_ibm_xt5160 1997_ibm_aptiva_2140; do
+	args="$(python3 "$root/tools/preset-args.py" "$here/waterbox.config" "$preset")"
+	nat="$(timeout 600 "$rn" --workdir "$work/p-$preset" $args --frames "$frames" --gate 2>/dev/null | digests)"
+	box="$(timeout 900 "$rw" "$core" $args --frames "$frames" 2>/dev/null | digests)"
+	if [ -z "$nat" ] || [ -z "$box" ]; then
+		echo "FAIL preset:$preset (a run produced no digests)"; fail=1
+	elif [ "$nat" != "$box" ]; then
+		echo "FAIL preset:$preset (native vs sandbox)"
+		echo "--- native"; echo "$nat"; echo "--- sandbox"; echo "$box"; fail=1
+	elif [ "$nat" = "$base" ]; then
+		echo "FAIL preset:$preset (the preset did not change the machine)"; fail=1
+	elif [ "$nat" = "$prev" ]; then
+		echo "FAIL preset:$preset (indistinguishable from the previous preset)"; fail=1
+	else
+		echo "PASS preset:$preset (a machine of its own, and both builds agree on it)"
+	fi
+	prev="$nat"
+done
 
 # ---- the machine-knobs leg (the BizHawk-imported sync settings) ------------
 # The imported settings (video card, CPU type, PC speaker, Sound Blaster)
 # must reach the composed conf in both builds: a machine reshaped by all of
 # them must DIFFER from the default machine, and the builds must agree on it.
-knobs_native="--video-card cga --cpu-type 8086 --pc-speaker disabled --sb-model none"
-knobs_box="--setting videoCardType=cga --setting cpuType=8086 --setting pcSpeaker=disabled --setting soundBlasterModel=none"
-nat="$(timeout 600 "$rn" --workdir "$work/knobs" $knobs_native --frames "$frames" --gate 2>/dev/null | digests)"
-box="$(timeout 900 "$rw" "$core" $knobs_box --frames "$frames" 2>/dev/null | digests)"
+# The same words on both sides, which is the point of run-native's --setting.
+knobs="--setting videoCardType=cga --setting cpuType=8086 --setting pcSpeaker=disabled --setting soundBlasterModel=none"
+nat="$(timeout 600 "$rn" --workdir "$work/knobs" $knobs --frames "$frames" --gate 2>/dev/null | digests)"
+box="$(timeout 900 "$rw" "$core" $knobs --frames "$frames" 2>/dev/null | digests)"
 base="$(timeout 600 "$rn" --workdir "$work/base3" --frames "$frames" --gate 2>/dev/null | digests)"
 if [ -z "$nat" ] || [ -z "$box" ]; then
 	echo "FAIL knobs (a run produced no digests)"; fail=1

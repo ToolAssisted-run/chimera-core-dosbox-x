@@ -4,7 +4,7 @@
 // configuration from, and input through the SetButton wide-input export - and
 // reports the same digests as run-native, so the two builds diff directly.
 //
-// usage: run-wbx <core.wbx> [--rom FILE] [--preset NAME] [--formatted-hdd N]
+// usage: run-wbx <core.wbx> [--rom FILE] [--setting NAME=VALUE]... [--formatted-hdd N]
 //        [--memsize MB] [--cycles N] [--joysticks] [--frames N] [--type TEXT]
 //        [--rerecord] [--turbo] [--savedata-out DIR]
 //
@@ -171,7 +171,7 @@ int main(int argc, char **argv)
 	const char *wbxPath = nullptr, *rom = nullptr;
 	const char *typeText = nullptr, *savedataOut = nullptr;
 	const char *dumpPrefix = nullptr;
-	const char *preset = nullptr, *formattedHdd = nullptr, *bootDrive = nullptr;
+	const char *formattedHdd = nullptr, *bootDrive = nullptr;
 	std::vector<std::string> extraFiles; // NAME=PATH, mounted as NAME
 	std::vector<std::pair<long, int>> swapCd; // FRAME:INDEX schedules
 	std::vector<std::pair<long, int>> swapFd;
@@ -184,7 +184,6 @@ int main(int argc, char **argv)
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
-		else if (!strcmp(argv[i], "--preset") && i + 1 < argc) preset = argv[++i];
 		else if (!strcmp(argv[i], "--formatted-hdd") && i + 1 < argc) formattedHdd = argv[++i];
 		else if (!strcmp(argv[i], "--boot-drive") && i + 1 < argc) bootDrive = argv[++i];
 		else if (!strcmp(argv[i], "--extra-file") && i + 1 < argc) extraFiles.push_back(argv[++i]);
@@ -216,7 +215,7 @@ int main(int argc, char **argv)
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
 	if (!wbxPath) {
-		fprintf(stderr, "usage: run-wbx <core.wbx> [--rom FILE] [--preset NAME] ...\n");
+		fprintf(stderr, "usage: run-wbx <core.wbx> [--rom FILE] [--setting NAME=VALUE] ...\n");
 		return 2;
 	}
 
@@ -272,7 +271,6 @@ int main(int argc, char **argv)
 		if (settings.size() > 1) settings += ",";
 		settings += std::string("\"") + k + "\":" + std::to_string(v);
 	};
-	if (preset) addStr("machinePreset", preset);
 	if (formattedHdd) addStr("formattedHardDisk", formattedHdd);
 	if (bootDrive) addStr("bootDrive", bootDrive);
 	if (memsize != -1000000) addNum("memsizeMB", memsize);

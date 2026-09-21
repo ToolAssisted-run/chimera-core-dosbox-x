@@ -121,10 +121,94 @@ axes = [
     {"name": "Mouse Speed Y", "min": -180, "max": 180, "neutral": 0},
 ]
 
+# ---- the ten machines, as PRESETS -----------------------------------------
+# They used to be a "Configuration Preset" SETTING that the core resolved for
+# itself by appending waterbox/conf/dosbox-x.<year>.<model>.conf AFTER
+# everything the user had chosen, so the preset silently outranked the grid and
+# seven settings had to describe themselves as "auto uses the preset's
+# default". They are now a declared preset list: the wizard's Apply WRITES
+# these values into the settings and the preset is finished with (chimera
+# docs/project.md, "Configuration presets").
+#
+# MACHINE_NEUTRAL is what a machine key means when that machine's .conf does
+# not mention it: base.conf's own value, so a preset that leaves it alone
+# describes the same machine the old preset blob did. Every preset carries the
+# WHOLE machine, not a layer - applying 1981 after 1997 gives an XT, not an XT
+# with an Aptiva's video memory left behind - so these fill in the rest.
+# tools/check-preset-machines.py holds every preset to the .conf it came from.
+#
+# cpuType, cpuCycles, cpuCore, soundBlasterModel, videoCardType and memsizeMB
+# are deliberately NOT here: base.conf answers "auto" for the first three and
+# every one of the ten machines states its own, so there is no honest neutral
+# and a preset that forgot one must fail the assert below rather than inherit a
+# made-up number.
+MACHINE_NEUTRAL = {
+    "memsizeKB": 0,
+    "videoMemoryMB": -1, "vesaModelistWidthLimit": 1280, "vesaModelistHeightLimit": 1024,
+    "dosVersion": "auto", "hardDriveDataRateLimit": -1, "floppyDriveDataRateLimit": -1,
+    "int13FakeIo": False, "cdromInsertionDelayMs": 0,
+}
+MACHINE_KEYS = sorted(set(MACHINE_NEUTRAL) | {
+    "videoCardType", "memsizeMB", "cpuType", "cpuCycles", "cpuCore", "soundBlasterModel"})
+
+# What a 1990s PC needs before a Windows 9x install will drive its disks and
+# notice a disc going in: the block the 1997 and 1999 .confs carry, which is
+# also the whole of conf/dosbox-x.osconfig.windows95|98.conf (see docs/PLAN.md).
+WIN9X = {
+    "videoMemoryMB": 8, "vesaModelistWidthLimit": 0, "vesaModelistHeightLimit": 0,
+    "dosVersion": "7.1", "hardDriveDataRateLimit": 0, "floppyDriveDataRateLimit": 0,
+    "int13FakeIo": True, "cdromInsertionDelayMs": 4000,
+}
+
+def machine(id, label, description, **values):
+    v = dict(MACHINE_NEUTRAL)
+    v["cpuCore"] = "normal"  # every one of the ten .confs says core=normal
+    v.update(values)
+    missing = [k for k in MACHINE_KEYS if k not in v]
+    assert not missing, f'preset {id} does not say what its {missing} is'
+    return {"id": id, "label": label, "description": description, "values": v}
+
 PRESETS = [
-    "1981_ibm_xt5150", "1983_ibm_xt5160", "1986_ibm_xt5162", "1987_ibm_ps2_25",
-    "1990_ibm_ps2_25_286", "1991_ibm_ps2_25_386", "1993_ibm_ps2_53_slc2_486",
-    "1994_ibm_ps2_76i_slc2_486", "1997_ibm_aptiva_2140", "1999_ibm_thinkpad_240",
+    machine("1981_ibm_xt5150", "1981 IBM XT 5150",
+            "An 8086 at 4.77 MHz, 256 KB of RAM, a monochrome MDA card and nothing but the PC speaker.",
+            cpuType="8086", cpuCycles=315, soundBlasterModel="none",
+            videoCardType="mda", memsizeMB=0, memsizeKB=256),
+    machine("1983_ibm_xt5160", "1983 IBM XT 5160",
+            "An 8086 at 4.77 MHz, the full 640 KB of RAM, CGA, PC speaker only.",
+            cpuType="8086", cpuCycles=315, soundBlasterModel="none",
+            videoCardType="cga", memsizeMB=0, memsizeKB=640),
+    machine("1986_ibm_xt5162", "1986 IBM XT 286 5162",
+            "An 80286-class XT at 6 MHz, 1 MB of RAM, EGA, PC speaker only.",
+            cpuType="8086", cpuCycles=700, soundBlasterModel="none",
+            videoCardType="ega", memsizeMB=1, memsizeKB=0),
+    machine("1987_ibm_ps2_25", "1987 IBM PS/2 25",
+            "An 80186 at 8 MHz, 640 KB of RAM, MCGA, and a Creative Game Blaster.",
+            cpuType="80186", cpuCycles=1400, soundBlasterModel="gb",
+            videoCardType="mcga", memsizeMB=0, memsizeKB=640),
+    machine("1990_ibm_ps2_25_286", "1990 IBM PS/2 25 286",
+            "A 286 at 10 MHz, 4 MB of RAM, VGA (emulated as an S3), and a Sound Blaster 1.0.",
+            cpuType="286", cpuCycles=2300, soundBlasterModel="sb1",
+            videoCardType="svga_s3", memsizeMB=4),
+    machine("1991_ibm_ps2_25_386", "1991 IBM PS/2 25 386",
+            "A 386 at 25 MHz, 6 MB of RAM, VGA (emulated as an S3), and a Sound Blaster 2.0.",
+            cpuType="386", cpuCycles=6000, soundBlasterModel="sb2",
+            videoCardType="svga_s3", memsizeMB=6),
+    machine("1993_ibm_ps2_53_slc2_486", "1993 IBM PS/2 53 SLC2 486",
+            "A 486 at 50 MHz, 32 MB of RAM, SVGA, and a Sound Blaster Pro 2. The default machine: fast enough for most DOS games without being an anachronism.",
+            cpuType="486", cpuCycles=22000, soundBlasterModel="sbpro2",
+            videoCardType="svga_s3", memsizeMB=32),
+    machine("1994_ibm_ps2_76i_slc2_486", "1994 IBM PS/2 76i SLC2 486",
+            "A 486 at 100 MHz, 64 MB of RAM, SVGA, and a Sound Blaster 16.",
+            cpuType="486", cpuCycles=77000, soundBlasterModel="sb16",
+            videoCardType="svga_s3", memsizeMB=64),
+    machine("1997_ibm_aptiva_2140", "1997 IBM Aptiva 2140",
+            "A Pentium II at 233 MHz, 96 MB of RAM, SVGA with 8 MB of video memory, a Sound Blaster 16 ViBRA, and the disk and CD-ROM behaviour a Windows 95 or 98 install expects.",
+            cpuType="pentium_ii", cpuCycles=200000, soundBlasterModel="sb16vibra",
+            videoCardType="svga_s3", memsizeMB=96, **WIN9X),
+    machine("1999_ibm_thinkpad_240", "1999 IBM Thinkpad 240",
+            "A Pentium III at 300 MHz, 128 MB of RAM, an S3 Trio64 with 16 MB of video memory, a Sound Blaster 16 ViBRA, and the disk and CD-ROM behaviour a Windows 95 or 98 install expects.",
+            cpuType="pentium_iii", cpuCycles=200000, soundBlasterModel="sb16vibra",
+            videoCardType="svga_s3trio64", memsizeMB=128, **{**WIN9X, "videoMemoryMB": 16}),
 ]
 
 CPU_TYPES = [
@@ -135,7 +219,7 @@ CPU_TYPES = [
 ]
 
 VIDEO_CARDS = [
-    "auto", "mda", "cga", "cga_mono", "cga_rgb", "cga_composite", "cga_composite2",
+    "mda", "cga", "cga_mono", "cga_rgb", "cga_composite", "cga_composite2",
     "hercules", "hercules_plus", "hercules_incolor", "hercules_color",
     "tandy", "pcjr", "pcjr_composite", "pcjr_composite2", "amstrad",
     "ega", "ega200", "jega", "mcga", "vgaonly",
@@ -150,8 +234,18 @@ VIDEO_CARDS = [
     "svga_ati_mach8", "svga_ati_mach32", "svga_ati_mach64", "fm_towns",
 ]
 
-SB_MODELS = ["auto", "none", "sb1", "sb2", "sbpro1", "sbpro2", "sb16",
+SB_MODELS = ["none", "sb1", "sb2", "sbpro1", "sbpro2", "sb16",
              "sb16vibra", "gb", "ess688", "reveal_sc400"]
+
+# DOSBox-X's own cores minus the JIT ones: dynamic_x86 is a recompiler and, like
+# PPSSPP's JIT, cannot be cross-build deterministic, so it is not compiled in
+# (docs/PLAN.md section 10). "auto" would only ever resolve to normal here, and
+# a no-op option that looks like a choice is worse than no option.
+CPU_CORES = ["normal", "full", "simple"]
+
+# [dos] ver, as base.conf documents it. "auto" is DOSBox-X's own word for
+# "pick a DOS kernel version", and it is what an unset ver means.
+DOS_VERSIONS = ["auto", "3.3", "5.0", "6.22", "7.0", "7.1"]
 
 # ---- firmware: every file a ROM-backed device opens -----------------------
 # The hashes are munt's own (extern/dosbox-x/src/libs/mt32/ROMInfo.cpp): it
@@ -227,13 +321,8 @@ config = {
         ".ima": "DOS", ".img": "DOS", ".xdf": "DOS", ".fdi": "DOS",
         ".hdd": "DOS", ".conf": "DOS"
     },
+    "presets": PRESETS,
     "settings": [
-        {
-            "name": "machinePreset", "display": "Configuration Preset",
-            "description": "Establishes a base configuration for DOSBox roughly corresponding to the selected computer model. We recommend choosing a model that is roughly of the same year or above of the game / tool you plan to run. More modern models may require more CPU power to emulate.",
-            "type": "enum", "options": PRESETS, "default": "1993_ibm_ps2_53_slc2_486",
-            "sync": True
-        },
         {
             "name": "joystick1Enabled", "display": "Enable Joystick 1",
             "description": "Determines whether a joystick will be plugged in the IBM PC Gameport 1",
@@ -273,39 +362,89 @@ config = {
         },
         {
             "name": "cpuCycles", "display": "CPU Cycles",
-            "description": "How many CPU cycles to emulate per ms. Default: -1, to keep the one included in the configuration preset.",
-            "type": "int", "default": -1, "sync": True
+            "description": "How many CPU cycles the machine executes per emulated millisecond - this, not a clock speed, is how DOSBox measures a CPU. Roughly 315 for a 4.77 MHz 8086, 2300 for a 10 MHz 286, 22000 for a 50 MHz 486, 200000 for a late Pentium. A game that runs too fast wants fewer; one that stutters wants more. Always a fixed count: DOSBox-X's 'auto' and 'max' settings chase the host's own speed, which a movie cannot reproduce.",
+            "type": "int", "default": 22000, "min": 1, "max": 10000000, "sync": True
         },
         {
             "name": "cpuType", "display": "CPU Type",
-            "description": "Chooses the CPU type to emulate. Auto uses the configuration preset's default.",
-            "type": "enum", "options": CPU_TYPES, "default": "auto", "sync": True
+            "description": "Which x86 the machine is. This decides the instruction set a program may use, not how fast it runs (that is CPU Cycles). 'auto' lets DOSBox-X pick the type that suits the rest of the machine. The '_prefetch' variants add the real chip's prefetch queue, which a few timing-sensitive titles need.",
+            "type": "enum", "options": CPU_TYPES, "default": "486", "sync": True
+        },
+        {
+            "name": "cpuCore", "display": "CPU Core",
+            "description": "The interpreter that executes the x86. 'normal' is the accurate one and what every machine here uses; 'simple' is a faster one for real-mode-only software; 'full' is the slowest and most literal. DOSBox-X's recompiling ('dynamic') cores are not built into this core: a JIT cannot be made to produce the same result on every machine, and a movie needs it to.",
+            "type": "enum", "options": CPU_CORES, "default": "normal", "sync": True
         },
         {
             "name": "videoCardType", "display": "Video Card Type",
-            "description": "Chooses the video card to emulate. Auto uses the configuration preset's default.",
-            "type": "enum", "options": VIDEO_CARDS, "default": "auto", "sync": True
+            "description": "Which display adapter is fitted. This is the machine's video hardware, so it decides what modes a game can find: 'mda' is monochrome text only, 'cga' four colours, 'ega' sixteen, 'mcga'/'vgaonly' the plain PS/2 and VGA cards, and the svga_* entries are the accelerated 1990s cards (an ordinary VGA-era game is happy on svga_s3). 'pc98'/'pc9801'/'pc9821' make the machine an NEC PC-98 instead of an IBM PC.",
+            "type": "enum", "options": VIDEO_CARDS, "default": "svga_s3", "sync": True
         },
         {
             "name": "memsizeMB", "display": "RAM Size (MB)",
-            "description": "The size of the memory capacity (RAM) to emulate. -1 to keep the value for the machine preset. Maximum value: 256",
-            "type": "int", "default": -1, "min": -1, "max": 256, "sync": True
+            "description": "Whole megabytes of RAM. Period machines had very little: 0 (with RAM Size (KB) supplying the real figure) for a pre-1987 PC, 1 to 8 for the 286/386 years, 32 to 128 for a late Pentium. More RAM is not always better - some DOS games refuse to start when they find more than they expect.",
+            "type": "int", "default": 32, "min": 0, "max": 256, "sync": True
+        },
+        {
+            "name": "memsizeKB", "display": "RAM Size (KB)",
+            "description": "Kilobytes of RAM ADDED to RAM Size (MB), for the machines that had less than a megabyte: 256 for a 1981 PC, 640 for an XT or a PS/2 25. Leave at 0 on anything from 1986 on, where RAM Size (MB) says it all.",
+            "type": "int", "default": 0, "min": 0, "max": 262144, "sync": True
         },
         {
             "name": "pcSpeaker", "display": "PC Speaker",
-            "description": "Chooses whether to enable/disable the PC Speaker. Auto uses the configuration preset's default.",
-            "type": "enum", "options": ["auto", "disabled", "enabled"],
-            "default": "auto", "sync": True
+            "description": "Whether the machine has its internal beeper wired up. Every machine here had one, and DOS games that predate sound cards play their music on it; disabling it silences that music without changing anything else.",
+            "type": "enum", "options": ["disabled", "enabled"],
+            "default": "enabled", "sync": True
         },
         {
             "name": "soundBlasterModel", "display": "Sound Blaster Model",
-            "description": "Chooses the Sound Blaster model to emulate. Auto uses the configuration preset's default.",
-            "type": "enum", "options": SB_MODELS, "default": "auto", "sync": True
+            "description": "Which sound card is fitted. 'none' is a machine with no card at all (pre-1987 PCs had none); 'gb' is Creative's Game Blaster; sb1/sb2 are the 8-bit Sound Blasters, sbpro1/sbpro2 the stereo Pros, sb16/sb16vibra the 16-bit ones. Pick the card the game was written for - a 1990 game will not find an sb16's extras and a 1995 game may refuse an sb1.",
+            "type": "enum", "options": SB_MODELS, "default": "sbpro2", "sync": True
         },
         {
             "name": "soundBlasterIRQ", "display": "Sound Blaster IRQ",
-            "description": "Chooses the interrupt request number for the Sound Blaster. -1 for automatic.",
-            "type": "int", "default": -1, "sync": True
+            "description": "The interrupt line the Sound Blaster answers on. -1 leaves DOSBox-X to use the model's own factory default (7 for the early cards, 5 for a Sound Blaster 16), which is what a game's own setup program expects to find.",
+            "type": "int", "default": -1, "min": -1, "max": 15, "sync": True
+        },
+        {
+            "name": "videoMemoryMB", "display": "Video Memory (MB)",
+            "description": "Megabytes on the video card, which is what caps the resolution and colour depth an SVGA card can offer: 1 reaches 1024x768 in 256 colours, 2 reaches 640x480 in true colour, 8 reaches 1600x1200 in true colour. -1 lets DOSBox-X fit the amount the chosen card shipped with. Ignored by the pre-VGA cards, which have a fixed amount.",
+            "type": "int", "default": -1, "min": -1, "max": 64, "sync": True
+        },
+        {
+            "name": "vesaModelistWidthLimit", "display": "VESA Mode List Width Limit",
+            "description": "Hides VESA modes wider than this many pixels from the list a program sees. Some DOS programs mishandle a long mode list or a mode larger than they can imagine; 1280 is DOSBox-X's own cap. 0 lists every mode the card can do, which is what a Windows 9x display driver wants.",
+            "type": "int", "default": 1280, "min": 0, "max": 4096, "sync": True
+        },
+        {
+            "name": "vesaModelistHeightLimit", "display": "VESA Mode List Height Limit",
+            "description": "The same cap on height. 1024 is DOSBox-X's own; 0 lists every mode.",
+            "type": "int", "default": 1024, "min": 0, "max": 4096, "sync": True
+        },
+        {
+            "name": "dosVersion", "display": "Reported DOS Version",
+            "description": "The version DOSBox-X's built-in DOS reports to programs that ask. 'auto' lets it pick (currently 5.0, the safest for DOS gaming). 6.22 is the last real MS-DOS; 7.0 and 7.1 are the DOS underneath Windows 95 and 98, and are what an installer or a long-filename-aware program looks for. Has no effect when the machine boots a DOS of its own from a disk.",
+            "type": "enum", "options": DOS_VERSIONS, "default": "auto", "sync": True
+        },
+        {
+            "name": "hardDriveDataRateLimit", "display": "Hard Disk Data Rate (bytes/s)",
+            "description": "Slows the emulated hard disk to this many bytes per second, so a game that reads from disk takes as long as it did on the real machine. -1 uses DOSBox-X's own period-plausible limit; 0 removes the limit entirely, which is what a Windows 9x install wants and what plain DOSBox does.",
+            "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
+        },
+        {
+            "name": "floppyDriveDataRateLimit", "display": "Floppy Data Rate (bytes/s)",
+            "description": "The same limit for the floppy drives. -1 uses DOSBox-X's own; 0 makes floppy reads instant.",
+            "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
+        },
+        {
+            "name": "int13FakeIo", "display": "Fake INT 13h Disk I/O",
+            "description": "Makes the emulated IDE and floppy controllers react to BIOS disk calls as real hardware would - changing their registers, and raising fake virtual-8086 I/O traps and interrupts. Windows 3.11's and Windows 95's 32-bit disk access need this and will not drive the disks without it; a plain DOS machine does not, and switching it on costs nothing but does nothing. Sets int13fakeio and int13fakev86io on both IDE channels and int13fakev86io on the floppy controller.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
+            "name": "cdromInsertionDelayMs", "display": "CD-ROM Insertion Delay (ms)",
+            "description": "How long the drive reports an empty tray after a disc is swapped, in milliseconds - the time it would take somebody to change the disc. 0 leaves the drive's own default (no delay). Windows 95 and later need about 4000 before their auto-insert notification will notice a new disc.",
+            "type": "int", "default": 0, "min": 0, "max": 60000, "sync": True
         },
         {
             "name": "bootDrive", "display": "Boot From",
@@ -317,9 +456,9 @@ config = {
         # the defaults change nothing, so a BizHawk movie's machine is intact)
         {
             "name": "midiDevice", "display": "MIDI Device",
-            "description": "What is plugged into the MPU-401 MIDI port. 'auto' keeps the machine preset's own (no synthesizer). 'mt32_old' is a first-generation Roland MT-32 (control ROM v1.07), which the earliest Sierra titles rely on the quirks of; 'mt32_new' is the second generation (v2.04); 'cm32l' is a Roland CM-32L / LAPC-I (v1.02), the MT-32 with the extra sound effects later games use. Each needs its control and PCM ROM, dumped from a unit you own.",
-            "type": "enum", "options": ["auto", "mt32_old", "mt32_new", "cm32l"],
-            "default": "auto", "sync": True
+            "description": "What is plugged into the MPU-401 MIDI port. 'none' leaves the port with nothing on the other end of it, which is how every one of these machines left the factory. 'mt32_old' is a first-generation Roland MT-32 (control ROM v1.07), which the earliest Sierra titles rely on the quirks of; 'mt32_new' is the second generation (v2.04); 'cm32l' is a Roland CM-32L / LAPC-I (v1.02), the MT-32 with the extra sound effects later games use. Each needs its control and PCM ROM, dumped from a unit you own.",
+            "type": "enum", "options": ["none", "mt32_old", "mt32_new", "cm32l"],
+            "default": "none", "sync": True
         },
         {
             "name": "pc98FontRom", "display": "Use PC-98 Font ROM",

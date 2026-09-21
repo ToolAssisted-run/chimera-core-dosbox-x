@@ -11,3 +11,4 @@ build/
 work-native/
 waterbox/tests/work/
 tests/roms/
+__pycache__/

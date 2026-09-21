@@ -34,6 +34,11 @@ chimera_root="$(cd "$chimera_root" && pwd)"
 ninja -C "$root/build/meson-guest" core.wbx
 sh "$mb/source/guest/check-wbx.sh" "$root/build/meson-guest/core.wbx"
 
+# the declaration is what a user's wizard reads, so it is checked before it is
+# packaged: a preset that names a setting the package does not have is silently
+# ignored by the frontend, and here is the only place that can be noticed
+python3 "$root/tools/check-presets.py" "$here/waterbox.config"
+
 staging="$root/build/package-staging"
 rm -rf "$staging"
 mkdir -p "$staging"

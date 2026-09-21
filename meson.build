@@ -562,7 +562,7 @@ chdflac = static_library('chdflac',
   include_directories: inc,
   c_args: ['-DDRFLAC_API=static'])
 
-# the embedded conf presets + formatted disk heads, generated into each build
+# the embedded base conf + formatted disk heads + fonts, generated into each build
 # dir and included by the driver (identical composition in both machines)
 py = find_program('python3')
 conf_assets = custom_target('conf-assets',
