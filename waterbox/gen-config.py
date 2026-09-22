@@ -459,6 +459,12 @@ config = {
             "type": "enum", "options": ["none", "a", "c"], "default": "none",
             "sync": True
         },
+        {
+            "name": "initialDrive", "display": "Initial Drive",
+            "description": "The drive the DOS shell starts on. 'auto' takes the first one the project actually mounted, in the order A: (a floppy), D: (a CD), C: (the hard disk). A letter asked for by name that has nothing mounted falls back to the same order. Z:, DOSBox-X's own drive of built-in commands, is never offered: a project always supplies a disk or gets a formatted one - the only exception is a project made of nothing but a configuration file, which does stay on Z:. Moving the shell off Z: changes what is on screen at the prompt, so a movie recorded before this setting existed replays on a machine whose prompt reads differently; set it to match if that matters. Ignored when Boot From boots an operating system, since the shell is then never reached.",
+            "type": "enum", "options": ["auto", "a", "c", "d"], "default": "auto",
+            "sync": True
+        },
         # ---- devices that are nothing without their ROM (chimera additions;
         # the defaults change nothing, so a BizHawk movie's machine is intact)
         {

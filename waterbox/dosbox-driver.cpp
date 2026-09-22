@@ -241,6 +241,7 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	// "rom" and the extension (rom.name) says how the machine takes it
 	// extra images (the rom2..romN convention) join the mount as a swap
 	// list; the disk-swap input controls cycle through them
+	bool mountedA = false, mountedD = false;
 	if (!m.floppyImages.empty() || !m.cdImages.empty()) {
 		// project mode: the slot map named every image; each list mounts on
 		// its own drive (mixed media works), listed order = swap order
@@ -255,6 +256,8 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		};
 		mountList('a', m.floppyImages, "floppy");
 		mountList('d', m.cdImages, "iso");
+		mountedA = !m.floppyImages.empty();
+		mountedD = !m.cdImages.empty();
 	} else {
 		std::string extras;
 		for (int32_t i = 0; i < m.extraImageCount; i++) {
@@ -262,13 +265,41 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 		}
 		static const char *floppyExts[] = { ".ima", ".img", ".xdf", ".fdi", ".hdm", ".nfd", ".d88", ".dcp" };
 		for (const char *e : floppyExts) {
-			if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; break; }
+			if (m.romExt == e) { conf += "imgmount a rom" + extras + " -t floppy\n"; mountedA = true; break; }
 		}
 		if (m.romExt == ".iso" || m.romExt == ".cue") {
 			conf += "imgmount d rom" + extras + " -t iso\n";
+			mountedD = true;
 		}
 	}
 	if (m.hddMounted) conf += m.hddIsHdi ? "imgmount c HardDiskDrive.hdi\n" : "imgmount c HardDiskDrive.img\n";
+
+	// ---- where the shell starts ----------------------------------------------
+	// DOSBox-X leaves its shell on Z:, its own virtual drive of built-in
+	// commands, which is never where anything the project supplied lives. The
+	// Initial Drive setting moves it to a real one. 'auto' takes the first that
+	// exists of A:, D:, C: - a floppy is the most specific thing a project can
+	// give (it is usually THE program), a CD next, and the hard disk last since
+	// it may only be the formatted scratch disk.
+	//
+	// A drive that was asked for by name but is not mounted falls back to the
+	// same order and SAYS SO, rather than leaving the shell on a letter that
+	// answers "Drive does not exist" to everything typed at it. And with no
+	// drive at all - possible, because a project may consist of nothing but a
+	// .conf - the shell stays on Z:, which is the only honest place left.
+	{
+		auto mounted = [&](const std::string &d) {
+			return (d == "a" && mountedA) || (d == "d" && mountedD) || (d == "c" && m.hddMounted);
+		};
+		std::string drive = m.initialDrive;
+		if (drive != "auto" && !mounted(drive)) {
+			printf("Initial Drive %s: is not mounted; using the first mounted of A:, D:, C:\n",
+				drive.c_str());
+			drive = "auto";
+		}
+		if (drive == "auto") drive = mountedA ? "a" : mountedD ? "d" : m.hddMounted ? "c" : "";
+		if (!drive.empty()) conf += drive + ":\n";
+	}
 	if (m.bootDrive == "a" || m.bootDrive == "c") {
 		// the very last autoexec line: boot never returns to the shell
 		// (a chimera addition; BizHawk movies run with bootDrive none)
@@ -371,6 +402,7 @@ bool dosdrv_machine_setting(DosDrvMachine &m, const std::string &name, const std
 	if (name == "cdromInsertionDelayMs") return asInt(m.cdromInsertionDelayMs);
 	if (name == "pcSpeaker") { m.pcSpeaker = value; return true; }
 	if (name == "bootDrive") { m.bootDrive = value; return true; }
+	if (name == "initialDrive") { m.initialDrive = value; return true; }
 	if (name == "midiDevice") { m.midiDevice = value; return true; }
 	if (name == "pc98FontRom") return asBool(m.pc98FontRom);
 	if (name == "pc98SoundBios") return asBool(m.pc98SoundBios);

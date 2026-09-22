@@ -295,6 +295,7 @@ ECL_EXPORT int Init(void)
 		num("cdromInsertionDelayMs", m.cdromInsertionDelayMs);
 		str("pcSpeaker");
 		str("bootDrive");
+		str("initialDrive");
 		str("midiDevice");
 		flag("pc98FontRom", 0);
 		flag("pc98SoundBios", 0);

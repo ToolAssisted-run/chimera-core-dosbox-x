@@ -437,6 +437,49 @@ else
 	fi
 fi
 
+# ---- where the shell starts (Initial Drive) ----------------------------------
+# DOSBox-X leaves its shell on Z:, its own drive of built-in commands, where
+# nothing the project supplied lives. Initial Drive moves it: 'auto' takes the
+# first mounted of A:, D:, C:; a named drive that is not mounted falls back to
+# that order; with nothing mounted at all the shell stays on Z:.
+#
+# The answer is read from DOS itself (DOS_GetDefaultDrive, via run-native's
+# --print-drive), not from the composed configuration - the conf only says what
+# was asked for, and a line DOSBox-X rejected would still be in it.
+idw="$work/idrive"; mkdir -p "$idw"
+python3 "$here/tests/gen-testfloppy.py" "$idw/f.img" HELLO.TXT hi >/dev/null
+python3 "$here/tests/gen-testiso.py" "$idw/c.iso" HELLO.TXT=@hi >/dev/null
+drv() { rm -rf "$idw/w"; mkdir -p "$idw/w"
+	timeout 600 "$rn" --workdir "$idw/w" --frames 200 --print-drive "$@" 2>/dev/null \
+		| sed -n 's/^drive=//p'; }
+idgot="$(drv --rom "$idw/f.img")$(drv --rom "$idw/c.iso")$(drv --formatted-hdd 21mb)"
+idgot="$idgot$(drv --floppy A.IMG="$idw/f.img" --cd C.ISO="$idw/c.iso")"
+idgot="$idgot$(drv --rom "$idw/c.iso" --formatted-hdd 21mb)"
+idgot="$idgot$(drv --rom "$idw/c.iso" --formatted-hdd 21mb --setting initialDrive=c)"
+idgot="$idgot$(drv --rom "$idw/f.img" --setting initialDrive=c)$(drv)"
+# floppy, CD, hdd, floppy+CD, CD+hdd, CD+hdd asked for C, C asked with no hdd, nothing
+idwant="ADCADCAZ"
+if [ "$idgot" = "$idwant" ]; then
+	echo "PASS initialDrive (auto picks A: then D: then C:, a named drive is honoured, a missing one falls back, nothing mounted stays on Z:)"
+else
+	echo "FAIL initialDrive (wanted $idwant, got ${idgot:-nothing})"; fail=1
+fi
+# And the SANDBOX reads the setting through its own settings channel, which
+# --print-drive cannot see. The prompt shows the drive letter, so the picture
+# differs between C: and D:; native and sandbox must agree on each.
+idnatC="$(timeout 600 "$rn" --workdir "$idw/nc" --frames 200 --gate --rom "$idw/c.iso" --formatted-hdd 21mb --setting initialDrive=c 2>/dev/null | digests)"
+idboxC="$(timeout 900 "$rw" "$core" --frames 200 --rom "$idw/c.iso" --formatted-hdd 21mb --setting initialDrive=c 2>/dev/null | digests)"
+idboxD="$(timeout 900 "$rw" "$core" --frames 200 --rom "$idw/c.iso" --formatted-hdd 21mb 2>/dev/null | digests)"
+if [ -z "$idnatC" ] || [ -z "$idboxC" ]; then
+	echo "FAIL initialDrive:sandbox (a run produced no digests)"; fail=1
+elif [ "$idnatC" != "$idboxC" ]; then
+	echo "FAIL initialDrive:sandbox (native vs sandbox with initialDrive=c)"; fail=1
+elif [ "$idboxC" = "$idboxD" ]; then
+	echo "FAIL initialDrive:sandbox (the sandbox ignored the setting: C: and auto (D:) drew the same)"; fail=1
+else
+	echo "PASS initialDrive:sandbox (the guest honours the setting, and native == sandbox)"
+fi
+
 # ---- the input leg ---------------------------------------------------------
 # Mouse and joystick, witnessed by tiny hand-assembled DOS programs delivered
 # on the test CD (gen-testcom.py): JOYTEST renders the game port's button

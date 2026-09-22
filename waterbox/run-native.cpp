@@ -27,6 +27,9 @@
 #include "dosbox-driver.h"
 #include "exercise-input.h"
 #include <keyboard.h>
+// the machine's own answer to "which drive is current" (dos_files.cpp); run-native
+// links the emulator in-process, so it can ask rather than infer
+uint8_t DOS_GetDefaultDrive(void);
 
 // The guest's clock is frozen by miniBox (a constant 2017-05-27 12:44:28 UTC,
 // the sandbox epoch); freeze the native build the same way so both machines
@@ -134,6 +137,7 @@ int main(int argc, char **argv)
 	const char *sliceOut = nullptr;
 	unsigned long sliceOff = 0, sliceLen = 0;
 	long holdPosX = -1, holdPosY = -1; // --mouse-pos: hold the position axes here
+	bool printDrive = false; // --print-drive: the current DOS drive when the run ends
 	long nudgeFrame = -1, nudgeBy = 0;  // --mouse-nudge FRAME:WIRE
 	long speedFrame = -1, speedBy = 0;  // --mouse-speed FRAME:PIXELS
 	int frames = 600;
@@ -212,6 +216,7 @@ int main(int argc, char **argv)
 			const char *colon = strchr(spec, ':');
 			speedBy = colon != nullptr ? strtol(colon + 1, 0, 0) : 0;
 		}
+		else if (!strcmp(argv[i], "--print-drive")) printDrive = true;
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--exercise-position")) { exercise = true; exercisePosition = true; }
@@ -396,6 +401,7 @@ int main(int argc, char **argv)
 			printf("domain[%s]=%016llx\n", dn, (unsigned long long)fnv1a(dd, ds));
 		}
 	}
+	if (printDrive) printf("drive=%c\n", 'A' + DOS_GetDefaultDrive());
 	if (sliceOut) {
 		// domain 0 is Conventional Memory - the frontend witness compares this
 		const char *dn; uint8_t *dd; uint64_t ds; bool dw;

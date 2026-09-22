@@ -76,6 +76,7 @@ struct DosDrvMachine {
 	bool hddMounted = false; // a HardDiskDrive.img memory file exists
 	bool hddIsHdi = false;   // ...named HardDiskDrive.hdi: a PC-98 image whose header carries the geometry
 	std::string bootDrive = "none"; // "a"/"c": boot that drive instead of the DOS shell
+	std::string initialDrive = "auto"; // the drive the DOS shell starts on: auto/a/c/d
 	// Devices that are nothing without their ROM. Each file is a declared
 	// firmware, mounted in the work directory under the name DOSBox-X itself
 	// looks for; "auto"/false changes nothing, so an existing movie's machine
