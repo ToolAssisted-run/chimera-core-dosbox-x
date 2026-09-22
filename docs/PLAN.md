@@ -109,6 +109,70 @@ Chimera: joystick axes ride the existing axis channel (analog, an
 improvement over BizHawk's digital-only sticks); mouse position/speed are
 axes, its buttons are buttons.
 
+#### The VMware absolute pointer (2026-09-22, issue #135)
+
+Everything above reaches the guest as a PS/2 mouse, which is a RELATIVE
+device: it reports how far the mouse moved, never where it is. Under plain
+DOS that is enough, because the cursor the programs read is DOSBox's own
+INT 33h cursor and the driver writes its position directly. Under a guest
+OS that keeps its own cursor - Windows 3.1 through 9x - it is not: the OS
+integrates the deltas through its own acceleration curve, so nothing
+outside the guest knows where the pointer actually is, and a movie that
+wants the pointer at a particular place has to steer it there by feel.
+That is what issue #135 asks for, and what its reporter's Lua helper does
+by hand: it is given the current position, because nothing can tell it.
+
+DOSBox-X already answers this. `src/ints/mouse.cpp` implements VMware's
+absolute-pointer backdoor - I/O port 5658h, magic 564D5868h in EAX, the
+command in CX - which a guest driver uses to ask for absolute mode and then
+read the cursor position as a pair of 0..0FFFFh coordinates instead of
+integrating PS/2 packets. Drivers for it exist already; upstream's own
+comment names vmwmouse for Windows 3.1. It is on in the base conf
+(`vmware = true`) and `MOUSE_Init` registers the port handler.
+
+It was never FED, though. `VMWARE_MousePosition`, the two button calls and
+`VMWARE_ScreenParams` are only called from `src/gui/sdlmain.cpp` and
+`src/gui/render.cpp` - the SDL frontend, which does not run here. A guest
+that asked for absolute mode got 8000h,8000h, the middle of the screen, on
+every read for ever. The driver now makes those calls:
+
+- the absolute cursor carries the SAME displacement as the PS/2 stream
+  (`mouseSpeedX/Y`, so an explicit Mouse Speed still moves a guest that is
+  in absolute mode), clamped at the edges of the plane the way a screen
+  clamps. It and `lastMousePos` both start at zero, so a movie that drives
+  Mouse Position X/Y and leaves the speeds alone puts the guest cursor
+  exactly where it asked;
+- the plane is the one the FRONTEND declares for those axes, 2560x2048
+  (waterbox.config), not the 800x600 range the BizHawk code scales DOSBox's
+  own cursor against. A guest driver rescales 0..0FFFFh to its own screen,
+  so the choice only sets the granularity, and the axis neutral should be
+  the middle of the screen;
+- `VMWARE_ScreenParams` is restated EVERY FRAME, not once at boot.
+  render.cpp says it too, from the SDL window's geometry, on every video
+  mode change. Said once at boot it was silently replaced the first time
+  the mode changed, and every position after that was scaled against the
+  wrong width - which is how the first measurement came back wrong (1534
+  instead of 431) and what the second one fixed;
+- the PS/2 event is still sent. It is the interrupt that tells the guest
+  driver to go and poll the port, so the two interfaces are not
+  alternatives: the relative one schedules, the absolute one answers.
+
+What this does NOT do is give the guest a driver. The user installs one in
+their own disk image, the way a BIOS is supplied, and games that read raw
+relative deltas (mouselook, DirectInput exclusive mode) are unaffected
+either way - absolute targeting means nothing to them.
+
+Proof: `VMWTEST.COM` (tests/gen-testcom.py) asks for absolute mode, polls
+the port and stores x, y and the buttons in the IACA at 0000:04F0 - the 16
+bytes IBM reserved for programs to talk to each other, which DOS never
+touches - so a run can be asked where the GUEST thinks the cursor is rather
+than only whether the screen changed. Run with `--exercise-position`, whose
+last frame feeds position 431,43, the guest reads back 2B1Eh,0561h, which
+is 431 and 43 scaled to the protocol's range and computed independently of
+the core. The same build with the driver's calls removed reads 8000h,8000h.
+Native and sandbox agree, and the rerecord leg proves the accumulator is
+ordinary guest memory that savestates carry.
+
 ### 6. The writable hard disk: in-guest memory file (KEEP)
 
 The proven recipe (also the model for chimera's whole savedata design, see

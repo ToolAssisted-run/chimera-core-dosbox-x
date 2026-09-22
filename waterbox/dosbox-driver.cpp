@@ -31,6 +31,7 @@
 #include <joystick.h>
 #include <mouse.h>
 #include <vga.h>
+#include <video.h>
 #include <mem.h>
 
 #define DOS_DRIVE_A 0
@@ -79,6 +80,13 @@ extern int mickey_threshold;
 extern bool user_cursor_locked;
 #define MOUSE_MAX_X 800
 #define MOUSE_MAX_Y 600
+// The plane the FRONTEND declares for Mouse Position X/Y (waterbox.config axes:
+// 0..2560 neutral 1280, 0..2048 neutral 1024). It is not MOUSE_MAX_X/Y, which
+// is the 800x600 range the BizHawk driver scaled DOSBox's own cursor against;
+// the VMware absolute pointer below answers in the frontend's coordinates, so
+// the axis neutral really is the middle of the guest screen.
+#define MOUSE_ABS_W 2560
+#define MOUSE_ABS_H 2048
 
 // ---- drive activity, one flag per KIND OF MEDIA ---------------------------
 // Set wherever a sector is actually read or written - the CD emulation in
@@ -690,12 +698,52 @@ void dosdrv_frame(const DosDrvInput &f)
 
 		Mouse_AddEvent(MOUSE_HAS_MOVED);
 	}
-	if (f.mouse.leftPressed) Mouse_ButtonPressed(0);
-	if (f.mouse.middlePressed) Mouse_ButtonPressed(2);
-	if (f.mouse.rightPressed) Mouse_ButtonPressed(1);
-	if (f.mouse.leftReleased) Mouse_ButtonReleased(0);
-	if (f.mouse.middleReleased) Mouse_ButtonReleased(2);
-	if (f.mouse.rightReleased) Mouse_ButtonReleased(1);
+
+	// The same movement, offered a second time as an ABSOLUTE position.
+	//
+	// DOSBox-X implements VMware's absolute-pointer backdoor (port 0x5658, in
+	// src/ints/mouse.cpp, enabled by vmware=true in the base conf): a guest
+	// driver that asks for absolute mode reads the cursor position off that
+	// port instead of integrating the PS/2 deltas. That is what lets a guest
+	// OS which keeps its OWN accelerated cursor - Windows 3.1 through 9x - be
+	// pointed AT a place rather than nudged towards one, and it is why the
+	// per-packet PS/2 limit of +/-255 stops mattering. Drivers for it already
+	// exist; upstream's comment names vmwmouse for Windows 3.1.
+	//
+	// Only sdlmain.cpp and render.cpp ever fed it, and neither runs headless,
+	// so until now the port answered with the centre of the screen forever.
+	// These are the calls they make.
+	//
+	// It carries the SAME displacement as the PS/2 stream - mouseSpeedX/Y, so
+	// an explicit Mouse Speed still moves a guest that is in absolute mode -
+	// and clamps at the edges of the plane the way a real screen does. Both
+	// this and lastMousePos start at zero, so a movie that drives Mouse
+	// Position X/Y and leaves the speeds alone puts the guest cursor exactly
+	// at the position it asked for. The PS/2 event above is still needed: it
+	// is the interrupt that tells the guest driver to go and poll the port.
+	//
+	// The plane is restated every frame rather than once at boot because
+	// render.cpp says it too, from the SDL window's geometry, every time the
+	// video mode changes - and headless there is no window for those numbers to
+	// mean anything. Said once at boot, the first mode change silently replaced
+	// it and every position after that was scaled against the wrong width.
+	static int32_t vmAbsX = 0, vmAbsY = 0;
+	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
+		vmAbsX = std::min(std::max(vmAbsX + mouseSpeedX, 0), MOUSE_ABS_W - 1);
+		vmAbsY = std::min(std::max(vmAbsY + mouseSpeedY, 0), MOUSE_ABS_H - 1);
+		VMWARE_ScreenParams(0, 0, MOUSE_ABS_W, MOUSE_ABS_H, false);
+		VMWARE_MousePosition((uint16_t)vmAbsX, (uint16_t)vmAbsY);
+	}
+
+	// Buttons go to both interfaces; the numbering is the same on each
+	// (0 left, 1 right, 2 middle), and a guest in absolute mode reads its
+	// button state from the port too.
+	if (f.mouse.leftPressed) { Mouse_ButtonPressed(0); VMWARE_MouseButtonPressed(0); }
+	if (f.mouse.middlePressed) { Mouse_ButtonPressed(2); VMWARE_MouseButtonPressed(2); }
+	if (f.mouse.rightPressed) { Mouse_ButtonPressed(1); VMWARE_MouseButtonPressed(1); }
+	if (f.mouse.leftReleased) { Mouse_ButtonReleased(0); VMWARE_MouseButtonReleased(0); }
+	if (f.mouse.middleReleased) { Mouse_ButtonReleased(2); VMWARE_MouseButtonReleased(2); }
+	if (f.mouse.rightReleased) { Mouse_ButtonReleased(1); VMWARE_MouseButtonReleased(1); }
 
 	_audioSamples.clear();
 

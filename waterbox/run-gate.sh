@@ -394,7 +394,7 @@ fi
 # the frontend's exact path - on the other. Differential (exercised vs quiet
 # must differ) plus native==sandbox==rerecord.
 python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
-python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" >/dev/null
 inputframes=500
 inputleg() {
 	name="$1"; cmd="$2"; joyflag="$3"; exflag="${4:---exercise}"
@@ -429,6 +429,32 @@ inputleg mouse 'd:\mousetest.com
 # exactly what the quiet one did, and the differential above said so.
 inputleg mouse-position 'd:\mousetest.com
 ' "" --exercise-position
+# The VMware absolute pointer, issue #135. VMWTEST asks port 5658h for absolute
+# mode and stores what it answers in the IACA at 0000:04F0, so unlike every
+# other leg here this one can ask the machine WHERE IT THINKS THE CURSOR IS
+# instead of only whether the screen changed. Fed nothing - which is what
+# happened until the driver made these calls, since only the SDL frontend ever
+# did - the port answers 8000h,8000h, the middle of the screen, for ever.
+inputleg vmware-mouse 'd:\vmwtest.com
+' "" --exercise-position
+vmwnat="$work/vmw-nat.bin"; vmwbox="$work/vmw-box.bin"
+timeout 900 "$rn" --workdir "$work/vmw-n" --rom "$work/input.iso" \
+	--frames "$inputframes" --exercise-position --type 'd:\vmwtest.com
+' --ram-slice 0x4F0 8 "$vmwnat" >/dev/null 2>&1
+timeout 1200 "$rw" "$core" --rom "$work/input.iso" \
+	--frames "$inputframes" --exercise-position --type 'd:\vmwtest.com
+' --ram-slice 0x4F0 8 "$vmwbox" >/dev/null 2>&1
+hexof() { od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n'; }
+vmwn="$(hexof "$vmwnat")"; vmwb="$(hexof "$vmwbox")"
+if [ -z "$vmwn" ] || [ -z "$vmwb" ]; then
+	echo "FAIL input:vmware-position (a run produced no slice)"; fail=1
+elif [ "$vmwn" = "00800080" ]; then
+	echo "FAIL input:vmware-position (the port still answers the centre of the screen)"; fail=1
+elif [ "$vmwn" != "$vmwb" ]; then
+	echo "FAIL input:vmware-position (native $vmwn vs sandbox $vmwb)"; fail=1
+else
+	echo "PASS input:vmware-position (the guest reads back $vmwn, native==sandbox)"
+fi
 
 # ---- the slots leg ---------------------------------------------------------
 # The project's slot map (chimera docs/project.md): MIXED media, which the

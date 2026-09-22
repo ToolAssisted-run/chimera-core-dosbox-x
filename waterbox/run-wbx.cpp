@@ -181,6 +181,8 @@ int main(int argc, char **argv)
 	bool rerecord = false, turbo = false, joysticks = false, exercise = false, exercisePosition = false;
 	long turboSettle = 0;
 	std::vector<std::string> extraSettings; // KEY=VALUE, string or number
+	const char *sliceOut = nullptr; // --ram-slice, as run-native's
+	unsigned long sliceOff = 0, sliceLen = 0;
 
 	for (int i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "--rom") && i + 1 < argc) rom = argv[++i];
@@ -211,6 +213,11 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--exercise-position")) { exercise = true; exercisePosition = true; }
 		else if (!strcmp(argv[i], "--joysticks")) joysticks = true;
 		else if (!strcmp(argv[i], "--setting") && i + 1 < argc) extraSettings.push_back(argv[++i]);
+		else if (!strcmp(argv[i], "--ram-slice") && i + 3 < argc) {
+			sliceOff = strtoul(argv[++i], 0, 0);
+			sliceLen = strtoul(argv[++i], 0, 0);
+			sliceOut = argv[++i];
+		}
 		else if (!wbxPath) wbxPath = argv[i];
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
@@ -462,6 +469,26 @@ int main(int argc, char **argv)
 		if (!dname) continue;
 		uint64_t dh = fnv(0, (const void *)GetMemoryDomainPtr(i), (size_t)GetMemoryDomainSize(i));
 		printf("domain[%s]=%016llx\n", dname, (unsigned long long)dh);
+	}
+
+	if (sliceOut) {
+		// domain 0 is Conventional Memory, as in run-native - the two runners
+		// must be able to answer the same question about the same bytes
+		const uint8_t *dd = (const uint8_t *)GetMemoryDomainPtr(0);
+		uint64_t ds = (uint64_t)GetMemoryDomainSize(0);
+		if (dd == nullptr || sliceOff + sliceLen > ds) {
+			fprintf(stderr, "ram slice out of range\n");
+			wbx_deactivate_host(h, &r); wbx_destroy_host(h, &r);
+			return 1;
+		}
+		FILE *f = fopen(sliceOut, "wb");
+		if (f == nullptr || fwrite(dd + sliceOff, 1, sliceLen, f) != sliceLen) {
+			fprintf(stderr, "could not write %s\n", sliceOut);
+			if (f) fclose(f);
+			wbx_deactivate_host(h, &r); wbx_destroy_host(h, &r);
+			return 1;
+		}
+		fclose(f);
 	}
 
 	if (savedataOut && !exportSaveData(h, savedataOut)) {
