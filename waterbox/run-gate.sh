@@ -24,7 +24,10 @@ while getopts "f:m:" opt; do
 	esac
 done
 if [ -z "$mb" ]; then
-	for candidate in "$root/../chimera" "$HOME/chimera"; do
+	# chimera-checkout is where CI puts it (.github/workflows/chimera.yml); the
+	# other two are a developer's machine. Missing it is a FAIL, not a skip: a
+	# leg that quietly skips is a leg that cannot fail.
+	for candidate in "$root/chimera-checkout" "$root/../chimera" "$HOME/chimera"; do
 		[ -d "$candidate/extern/chimera-common-minibox" ] \
 			&& { mb="$candidate/extern/chimera-common-minibox"; break; }
 	done
@@ -73,20 +76,22 @@ fi
 # machine nobody changed and pass - which is how a broken guest build was once
 # packaged as its predecessor (chimera-core-pcem's gate has carried this leg
 # ever since; this one did not).
-# Only what core.wbx is COMPILED from. waterbox.config is not an input to it -
-# the frontend reads it out of the package - so listing it here made a leg that
-# no rebuild could satisfy: edit the declaration, and the check stayed red
-# however many times ninja was run. An instrument that cannot be satisfied is
-# worse than no instrument, because the next person learns to ignore it.
-stale=""
-for src in "$here"/*.cpp "$here"/*.c "$here"/*.h; do
-	[ -f "$src" ] || continue
-	[ "$src" -nt "$core" ] && stale="$stale $(basename "$src")"
-done
-if [ -z "$stale" ]; then
-	echo "PASS wbx:fresh (core.wbx is newer than every source beside it)"
+# Asked of the BUILD SYSTEM, not of a list of files. A hand-kept list was wrong
+# twice in one day - it counted waterbox.config (read by the frontend, compiled
+# by nobody) and then run-native.cpp (a host tool) - and each time the leg went
+# red in a way no rebuild could satisfy. An instrument that cannot be satisfied
+# is worse than none, because the next person learns to ignore it. ninja knows
+# exactly what core.wbx is built from; a dry run that has work to do means the
+# binary under test is not the one these sources describe.
+if pending="$(ninja -C "$root/build/meson-guest" -n core.wbx 2>&1)"; then
+	case "$pending" in
+		*"no work to do"*)
+			echo "PASS wbx:fresh (core.wbx is up to date with everything it is built from)" ;;
+		*)
+			echo "FAIL wbx:fresh (core.wbx is stale - ninja would rebuild: $(echo "$pending" | grep -c '^\[') step(s); run ninja -C build/meson-guest)"; fail=1 ;;
+	esac
 else
-	echo "FAIL wbx:fresh (core.wbx is older than:$stale - run ninja -C build/meson-guest)"; fail=1
+	echo "FAIL wbx:fresh (could not ask ninja about build/meson-guest)"; fail=1
 fi
 
 # ---- the boot leg ----------------------------------------------------------
