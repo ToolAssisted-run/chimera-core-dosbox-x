@@ -133,6 +133,9 @@ int main(int argc, char **argv)
 	const char *savedataOut = nullptr;
 	const char *sliceOut = nullptr;
 	unsigned long sliceOff = 0, sliceLen = 0;
+	long holdPosX = -1, holdPosY = -1; // --mouse-pos: hold the position axes here
+	long nudgeFrame = -1, nudgeBy = 0;  // --mouse-nudge FRAME:WIRE
+	long speedFrame = -1, speedBy = 0;  // --mouse-speed FRAME:PIXELS
 	int frames = 600;
 	bool gate = false, verbose = false, exercise = false, exercisePosition = false;
 	const char *formattedHdd = "none";
@@ -186,6 +189,28 @@ int main(int argc, char **argv)
 			sliceOff = strtoul(argv[++i], 0, 0);
 			sliceLen = strtoul(argv[++i], 0, 0);
 			sliceOut = argv[++i];
+		}
+		else if (!strcmp(argv[i], "--mouse-pos") && i + 1 < argc) {
+			// X:Y on the 0..65535 plane, held for every frame - the absolute
+			// position axis with a value somebody can predict by hand
+			const char *spec = argv[++i];
+			holdPosX = strtol(spec, 0, 0);
+			const char *colon = strchr(spec, ':');
+			holdPosY = colon != nullptr ? strtol(colon + 1, 0, 0) : holdPosX;
+		}
+		else if (!strcmp(argv[i], "--mouse-nudge") && i + 1 < argc) {
+			// FRAME:WIRE - from FRAME on, the held position moves by WIRE units
+			const char *spec = argv[++i];
+			nudgeFrame = strtol(spec, 0, 0);
+			const char *colon = strchr(spec, ':');
+			nudgeBy = colon != nullptr ? strtol(colon + 1, 0, 0) : 0;
+		}
+		else if (!strcmp(argv[i], "--mouse-speed") && i + 1 < argc) {
+			// FRAME:PIXELS - one frame of relative movement, for comparison
+			const char *spec = argv[++i];
+			speedFrame = strtol(spec, 0, 0);
+			const char *colon = strchr(spec, ':');
+			speedBy = colon != nullptr ? strtol(colon + 1, 0, 0) : 0;
 		}
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
@@ -336,6 +361,9 @@ int main(int argc, char **argv)
 			in.joy1.button2 = ex.joyB2 != 0;
 			prevEx = ex;
 		}
+		if (holdPosX >= 0) { in.mouse.posX = (int32_t)holdPosX; in.mouse.posY = (int32_t)holdPosY; }
+		if (nudgeFrame >= 0 && i >= nudgeFrame) in.mouse.posX += (int32_t)nudgeBy;
+		if (speedFrame >= 0 && i == speedFrame) in.mouse.speedX = (int32_t)speedBy;
 		dosdrv_frame(in);
 
 		int w = 0, h = 0, nsamp = 0;

@@ -30,11 +30,17 @@ typedef struct {
 /* positionOnly: the mouse is driven by Mouse Position alone, both speeds held
  * at zero - which moves it by how far the position moved, as BizHawk does
  * (issue #61). Before that was ported this pattern moved nothing, and the
- * gate's differential against a quiet run is what says so. */
+ * gate's differential against a quiet run is what says so.
+ *
+ * The position plane is 0..65535 across the guest's screen, whatever mode it
+ * is in - the one convention every core uses for an absolute point. It used to
+ * be 0..800 by 0..600 here, which was neither the plane the config declared
+ * (2560x2048) nor the one the driver divided by, and feeding only the bottom
+ * third of the declared range is why the gate never noticed they disagreed. */
 static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 {
 	ExLevels e;
-	e.posX = 400; e.posY = 300; e.spdX = 0; e.spdY = 0;
+	e.posX = 32768; e.posY = 32768; e.spdX = 0; e.spdY = 0; /* the declared neutral: the middle of the screen */
 	e.mouseL = 0; e.mouseR = 0;
 	e.joyUp = 0; e.joyDown = 0; e.joyLeft = 0; e.joyRight = 0;
 	e.joyB1 = 0; e.joyB2 = 0;
@@ -44,8 +50,8 @@ static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 	x ^= x >> 33;
 	e.spdX = (int32_t)(x % 21) - 10;
 	e.spdY = (int32_t)((x >> 8) % 21) - 10;
-	e.posX = (int32_t)((x >> 16) % 801);
-	e.posY = (int32_t)((x >> 24) % 601);
+	e.posX = (int32_t)((x >> 16) % 65536);
+	e.posY = (int32_t)((x >> 24) % 65536);
 	e.mouseL = (uint8_t)((frame >> 4) & 1);
 	e.mouseR = (uint8_t)((frame >> 5) & 1);
 	e.joyUp = (uint8_t)((frame >> 2) & 1);
@@ -63,8 +69,8 @@ static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 		e.joyB1 = 0; e.joyB2 = 0;
 		e.spdX = 0;
 		e.spdY = 0;
-		e.posX = (int32_t)((step >> 16) % 801);
-		e.posY = (int32_t)((step >> 32) % 601);
+		e.posX = (int32_t)((step >> 16) % 65536);
+		e.posY = (int32_t)((step >> 32) % 65536);
 	}
 	return e;
 }

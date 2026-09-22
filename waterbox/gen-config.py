@@ -112,11 +112,18 @@ buttons = [n for n, _ in JOY] + [n for n, _ in MOUSE_BTNS] + [n for n, _ in SWAP
     + [name for _, name, _ in KEYS]
 assert len(buttons) == 123, len(buttons)
 
-# BizHawk's axis planes: absolute position on a MouseAbsoluteScreenWidth/
-# Height plane (defaults SVGA_MAX 2560x2048), relative speed -180..180.
+# An absolute position on the guest's screen is 0..65535 with neutral 32768 on
+# every Chimera core (chimera docs/porting-a-core.md, "A point on the screen").
+# A PC changes video mode whenever it likes, so no declared range can be the
+# screen; the wire carries a FRACTION of whatever is being drawn and the driver
+# converts it against the live mode. Speed stays relative, in pixels.
+#
+# This replaced BizHawk's MouseAbsoluteScreenWidth/Height plane (2560x2048),
+# which the driver then divided by a different number again (800x600), so the
+# right-hand two thirds of the window could not be reached at all.
 axes = [
-    {"name": "Mouse Position X", "min": 0, "max": 2560, "neutral": 1280},
-    {"name": "Mouse Position Y", "min": 0, "max": 2048, "neutral": 1024},
+    {"name": "Mouse Position X", "min": 0, "max": 65535, "neutral": 32768},
+    {"name": "Mouse Position Y", "min": 0, "max": 65535, "neutral": 32768},
     {"name": "Mouse Speed X", "min": -180, "max": 180, "neutral": 0},
     {"name": "Mouse Speed Y", "min": -180, "max": 180, "neutral": 0},
 ]
@@ -315,7 +322,7 @@ config = {
         "_comment": "index order is the wire format, imported from BizHawk's controller definition: joysticks, mouse buttons, disk-swap controls, then the 102-key keyboard (KBD_KEYS 1..102, see gen-config.py). Wider than 64, so everything rides the SetButton channel.",
         "buttons": buttons,
         "axes": axes,
-        "_axes_note": "Mouse position is absolute on a 2560x2048 plane (BizHawk's default MouseAbsoluteScreenWidth/Height); speed is the per-frame relative movement. The frontend feeds these through SetAxis before every frame."
+        "_axes_note": "Mouse position is an absolute point on the guest screen, 0..65535 across whatever the machine is drawing right now - a DOS box changes video mode whenever it likes, so the wire carries a fraction and the driver converts it against the live mode. Speed is the per-frame relative movement, in guest pixels. The frontend feeds these through SetAxis before every frame."
     },
     "extensions": {
         ".ima": "DOS", ".img": "DOS", ".xdf": "DOS", ".fdi": "DOS",

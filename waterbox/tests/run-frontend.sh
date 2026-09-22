@@ -163,11 +163,12 @@ elif [ ! -x "$rw" ]; then
 else
 	rm -rf "$work/sd.engine" "$work/sd.box"
 	# a neutral movie for the DOSBox Controller: 4 mouse axes at neutral
-	# (position 1280,1024 on the 2560x2048 plane) in the console group before
-	# its 111 buttons (mouse, swap, the 102 keys), then the two joysticks
+	# (position 32768,32768 - the middle of the guest's screen, whatever mode
+	# it is in) in the console group before its 111 buttons (mouse, swap, the
+	# 102 keys), then the two joysticks
 	python3 - "$work/sd.movie.txt" <<'PYMOVIE'
 import sys
-entry = "| 1280, 1024,    0,    0," + "." * 111 + "|" + "." * 6 + "|" + "." * 6 + "|"
+entry = "|32768,32768,    0,    0," + "." * 111 + "|" + "." * 6 + "|" + "." * 6 + "|"
 open(sys.argv[1], "w").write((entry + "\n") * 300)
 PYMOVIE
 	( cd "$chimera_root" && LD_LIBRARY_PATH="$chimera_root/build/dll" timeout 900 "$crun" \

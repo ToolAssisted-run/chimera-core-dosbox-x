@@ -78,15 +78,19 @@ extern std::set<KBD_KEYS> _releasedKeys;
 // ---- mouse ----------------------------------------------------------------
 extern int mickey_threshold;
 extern bool user_cursor_locked;
-#define MOUSE_MAX_X 800
-#define MOUSE_MAX_Y 600
-// The plane the FRONTEND declares for Mouse Position X/Y (waterbox.config axes:
-// 0..2560 neutral 1280, 0..2048 neutral 1024). It is not MOUSE_MAX_X/Y, which
-// is the 800x600 range the BizHawk driver scaled DOSBox's own cursor against;
-// the VMware absolute pointer below answers in the frontend's coordinates, so
-// the axis neutral really is the middle of the guest screen.
-#define MOUSE_ABS_W 2560
-#define MOUSE_ABS_H 2048
+// Mouse Position X/Y is a point on the guest's screen as a FRACTION of it:
+// 0..65535 across whatever the machine is drawing, neutral 32768 in the middle,
+// which is the one convention every Chimera core uses (chimera
+// docs/porting-a-core.md, "A point on the screen").
+//
+// 65536, not 65535, is the divisor: 65535 is the largest VALUE and 65536 the
+// number of STEPS, so dividing by 65536 maps the wire onto 0..W-1 on its own.
+// Dividing by 65535 lands the maximum one pixel past the last one and needs
+// the clamp below to save it - which the clamp does, so this is a matter of
+// not depending on it rather than a difference anything can observe. Measured:
+// swapping the two changes no reading this core's gate can take.
+#define MOUSE_ABS_STEPS 65536
+#define MOUSE_ABS_MAX 65535
 
 // ---- drive activity, one flag per KIND OF MEDIA ---------------------------
 // Set wherever a sector is actually read or written - the CD emulation in
@@ -660,6 +664,24 @@ void dosdrv_frame(const DosDrvInput &f)
 
 	// Mouse
 	//
+	// WHAT THE SCREEN IS. Nothing declared in waterbox.config can be the guest's
+	// screen, because a DOS box changes video mode whenever it likes. What CAN
+	// be is the range INT 33h keeps for the mode it is in: Mouse_AfterNewVideoMode
+	// sets mouse.min_x/max_x per mode, and functions 07h and 08h let the guest
+	// move them. So the fraction on the wire is resolved against THAT, here,
+	// every frame - which is how an absolute position follows a mode change
+	// without any number in this file knowing what the modes are.
+	//
+	// This used to be resolved against a constant 800x600 while the config
+	// declared a 2560x2048 plane, so an axis at its maximum came out as 3.2x
+	// the screen width: pointing at the middle of the window put the cursor
+	// 1.6x past the right edge, and the right-hand two thirds of the window
+	// could not be reached at all.
+	const int32_t screenW = (int32_t)mouse.max_x - (int32_t)mouse.min_x + 1;
+	const int32_t screenH = (int32_t)mouse.max_y - (int32_t)mouse.min_y + 1;
+	const int32_t posPxX = screenW > 0 ? (int32_t)(((int64_t)f.mouse.posX * screenW) / MOUSE_ABS_STEPS) : 0;
+	const int32_t posPxY = screenH > 0 ? (int32_t)(((int64_t)f.mouse.posY * screenH) / MOUSE_ABS_STEPS) : 0;
+
 	// A speed of zero means "move by how far the position moved" - BizHawk's
 	// frontend does exactly this before its driver sees the frame (DOSBox.cs:
 	// DeltaX = SpeedX != 0 ? SpeedX : PosX - lastPosX, the last position kept
@@ -668,15 +690,45 @@ void dosdrv_frame(const DosDrvInput &f)
 	// that the native reference and the sandbox share it, and the last position
 	// is ordinary guest memory, so a savestate carries it as BizHawk's does.
 	// Like BizHawk, it is kept whether or not either speed was given.
-	static int32_t lastMousePosX = 0, lastMousePosY = 0;
-	const int32_t mouseSpeedX = f.mouse.speedX != 0 ? f.mouse.speedX : f.mouse.posX - lastMousePosX;
-	const int32_t mouseSpeedY = f.mouse.speedY != 0 ? f.mouse.speedY : f.mouse.posY - lastMousePosY;
-	lastMousePosX = f.mouse.posX;
-	lastMousePosY = f.mouse.posY;
-	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
-		mouse.x = (double)mouse.min_x + ((double)f.mouse.posX / (double)MOUSE_MAX_X) * (double)mouse.max_x;
-		mouse.y = (double)mouse.min_y + ((double)f.mouse.posY / (double)MOUSE_MAX_Y) * (double)mouse.max_y;
+	//
+	// The difference is taken in PIXELS, not in wire units. A wire unit is
+	// 1/65536 of the screen - about a hundredth of a pixel at 640 wide - so
+	// differencing the wire would hand the mickey path numbers about a hundred
+	// times too large, and a one-pixel nudge would fly across the screen.
+	// -1 is "no previous pixel", so the very first frame always asserts. Without
+	// it a movie that holds the position at exactly the starting value - zero,
+	// the left edge - produces no delta on any frame and never places the
+	// cursor at all.
+	static int32_t lastPosPxX = -1, lastPosPxY = -1;
+	const bool posDroveX = f.mouse.speedX == 0, posDroveY = f.mouse.speedY == 0;
+	const int32_t mouseSpeedX = !posDroveX ? f.mouse.speedX : (lastPosPxX < 0 ? 0 : posPxX - lastPosPxX);
+	const int32_t mouseSpeedY = !posDroveY ? f.mouse.speedY : (lastPosPxY < 0 ? 0 : posPxY - lastPosPxY);
+	lastPosPxX = posPxX;
+	lastPosPxY = posPxY;
 
+	// AN ABSOLUTE POSITION IS ASSERTED EVERY FRAME, not only when it changes.
+	// A fraction of the screen is not a fixed pixel: the same 32768 is pixel
+	// 160 in a 320-wide mode and pixel 320 in a 640-wide one, so the pixel has
+	// to be recomputed and rewritten whenever the machine redraws - and
+	// Mouse_AfterNewVideoMode resets the cursor to the middle of the new range
+	// on every mode set, which a position that only wrote itself on a change
+	// would never recover from. Holding a position and watching the DOS cursor
+	// walk off it at the next mode change is what this replaced.
+	//
+	// An axis driven by an explicit Mouse Speed is NOT asserted: it is moved by
+	// that speed instead, so a movie that steers relatively is not dragged back
+	// to wherever the untouched position axis is resting - which, now that the
+	// neutral is the middle of the screen, would otherwise pin it there.
+	if (posDroveX) mouse.x = (double)(mouse.min_x + posPxX);
+	else mouse.x += (double)mouseSpeedX;
+	if (posDroveY) mouse.y = (double)(mouse.min_y + posPxY);
+	else mouse.y += (double)mouseSpeedY;
+	if (mouse.x < (double)mouse.min_x) mouse.x = (double)mouse.min_x;
+	else if (mouse.x > (double)mouse.max_x) mouse.x = (double)mouse.max_x;
+	if (mouse.y < (double)mouse.min_y) mouse.y = (double)mouse.min_y;
+	else if (mouse.y > (double)mouse.max_y) mouse.y = (double)mouse.max_y;
+
+	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
 		float adjustedDeltaX = (float)mouseSpeedX * f.mouse.sensitivity;
 		float adjustedDeltaY = (float)mouseSpeedY * f.mouse.sensitivity;
 
@@ -714,13 +766,17 @@ void dosdrv_frame(const DosDrvInput &f)
 	// so until now the port answered with the centre of the screen forever.
 	// These are the calls they make.
 	//
-	// It carries the SAME displacement as the PS/2 stream - mouseSpeedX/Y, so
-	// an explicit Mouse Speed still moves a guest that is in absolute mode -
-	// and clamps at the edges of the plane the way a real screen does. Both
-	// this and lastMousePos start at zero, so a movie that drives Mouse
-	// Position X/Y and leaves the speeds alone puts the guest cursor exactly
-	// at the position it asked for. The PS/2 event above is still needed: it
-	// is the interrupt that tells the guest driver to go and poll the port.
+	// THE WIRE IS ALREADY THE PROTOCOL'S RANGE. VMware's absolute pointer
+	// answers 0..0FFFFh across the screen, and so does Mouse Position X/Y, so a
+	// position needs no conversion here at all: declare the plane as the wire's
+	// own range and the scaling in mouse.cpp becomes an identity. That also
+	// keeps this path independent of the INT 33h cursor range, which is what
+	// the other path resolves against - and which means nothing to the guests
+	// this one exists for, since a Windows mouse driver never calls INT 33h.
+	//
+	// An explicit Mouse Speed still moves a guest in absolute mode: a speed is
+	// in guest pixels, so it converts UP to wire units against the live screen,
+	// the mirror of the conversion above.
 	//
 	// The plane is restated every frame rather than once at boot because
 	// render.cpp says it too, from the SDL window's geometry, every time the
@@ -729,9 +785,13 @@ void dosdrv_frame(const DosDrvInput &f)
 	// it and every position after that was scaled against the wrong width.
 	static int32_t vmAbsX = 0, vmAbsY = 0;
 	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
-		vmAbsX = std::min(std::max(vmAbsX + mouseSpeedX, 0), MOUSE_ABS_W - 1);
-		vmAbsY = std::min(std::max(vmAbsY + mouseSpeedY, 0), MOUSE_ABS_H - 1);
-		VMWARE_ScreenParams(0, 0, MOUSE_ABS_W, MOUSE_ABS_H, false);
+		vmAbsX = posDroveX ? f.mouse.posX
+			: vmAbsX + (screenW > 0 ? (int32_t)(((int64_t)mouseSpeedX * MOUSE_ABS_STEPS) / screenW) : 0);
+		vmAbsY = posDroveY ? f.mouse.posY
+			: vmAbsY + (screenH > 0 ? (int32_t)(((int64_t)mouseSpeedY * MOUSE_ABS_STEPS) / screenH) : 0);
+		vmAbsX = std::min(std::max(vmAbsX, 0), (int32_t)MOUSE_ABS_MAX);
+		vmAbsY = std::min(std::max(vmAbsY, 0), (int32_t)MOUSE_ABS_MAX);
+		VMWARE_ScreenParams(0, 0, MOUSE_ABS_MAX, MOUSE_ABS_MAX, false);
 		VMWARE_MousePosition((uint16_t)vmAbsX, (uint16_t)vmAbsY);
 	}
 

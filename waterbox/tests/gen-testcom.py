@@ -9,6 +9,9 @@ would otherwise read:
   MOUSETEST.COM INT 33h reset, then busy-loop: INT 33h AX=3 (buttons and
                 position), write BL/CL/DL to B800:0000. Mouse movement and
                 buttons change the screen.
+  POSTEST.COM   INT 33h fn 3 like MOUSETEST, but stores the WHOLE position
+                (CX, DX) in the IACA at 0000:04F0, so a run can be asked where
+                the DOS cursor is as a number.
   VMWTEST.COM   asks the VMware absolute pointer (port 5658h) for absolute
                 mode, then busy-loops reading the cursor position off it and
                 stores x, y and the buttons in the IACA at 0000:04F0 - the
@@ -89,8 +92,71 @@ VMWTEST = bytes([
     0xEB, 0xD5,                          # jmp loop
 ])
 
+# The INT 33h cursor as a NUMBER, not as pixels on a screen: the same fn 03h
+# MOUSETEST polls, but the full CX/DX stored in the IACA, so a run can be asked
+# where the DOS cursor actually is and the answer checked against a position
+# worked out independently of the core.
+POSTEST = bytes([
+    0xB8, 0x00, 0x00,        # mov ax, 0            (reset/detect)
+    0xCD, 0x33,              # int 33h
+    0x31, 0xC0,              # xor ax, ax
+    0x8E, 0xC0,              # mov es, ax           (ES = 0, for the IACA)
+    0xBF, 0xF0, 0x04,        # mov di, 04F0h
+    # loop:
+    0xB8, 0x03, 0x00,        # mov ax, 3            (buttons + position)
+    0xCD, 0x33,              # int 33h              -> BX buttons, CX x, DX y
+    0x26, 0x89, 0x0D,        # mov es:[di], cx
+    0x26, 0x89, 0x55, 0x02,  # mov es:[di+2], dx
+    0x26, 0x88, 0x5D, 0x04,  # mov es:[di+4], bl
+    0xEB, 0xEE,              # jmp loop
+])
+
+# POSTEST, but it switches to 40-column text first (INT 10h AX=0001), which
+# halves the mouse's screen range from 640 to 320. The same absolute position
+# must then land on the same FRACTION of the screen and therefore half the
+# pixel - which is the whole point of a position that is not a fixed number.
+MODETEST = bytes([
+    0xB8, 0x01, 0x00,        # mov ax, 0001h        (40x25 text)
+    0xCD, 0x10,              # int 10h
+    0xB8, 0x00, 0x00,        # mov ax, 0
+    0xCD, 0x33,              # int 33h              (reset, after the mode set)
+    0x31, 0xC0,              # xor ax, ax
+    0x8E, 0xC0,              # mov es, ax
+    0xBF, 0xF0, 0x04,        # mov di, 04F0h
+    # loop:
+    0xB8, 0x03, 0x00,        # mov ax, 3
+    0xCD, 0x33,              # int 33h
+    0x26, 0x89, 0x0D,        # mov es:[di], cx
+    0x26, 0x89, 0x55, 0x02,  # mov es:[di+2], dx
+    0x26, 0x88, 0x5D, 0x04,  # mov es:[di+4], bl
+    0xEB, 0xEE,              # jmp loop
+])
+
+# The MICKEYS, accumulated: INT 33h fn 0Bh returns the motion counters and
+# clears them, so a polling loop that adds them up in the IACA reports the
+# total relative movement the machine was told about. That is the number a
+# position and a speed must AGREE on - a position moved ten pixels and a speed
+# of ten pixels are the same movement, and if the position path differenced its
+# wire instead of its pixels they would differ by about a hundredfold.
+MICKTEST = bytes([
+    0xB8, 0x00, 0x00,              # mov ax, 0
+    0xCD, 0x33,                    # int 33h
+    0x31, 0xC0,                    # xor ax, ax
+    0x8E, 0xC0,                    # mov es, ax
+    0xBF, 0xF0, 0x04,              # mov di, 04F0h
+    0x26, 0xC7, 0x05, 0x00, 0x00,  # mov word es:[di], 0
+    0x26, 0xC7, 0x45, 0x02, 0x00, 0x00,  # mov word es:[di+2], 0
+    # loop:
+    0xB8, 0x0B, 0x00,              # mov ax, 0Bh      (read motion counters)
+    0xCD, 0x33,                    # int 33h          -> CX dx, DX dy
+    0x26, 0x01, 0x0D,              # add es:[di], cx
+    0x26, 0x01, 0x55, 0x02,        # add es:[di+2], dx
+    0xEB, 0xF2,                    # jmp loop
+])
+
 os.makedirs(outdir, exist_ok=True)
 for name, data in (('JOYTEST.COM', JOYTEST), ('MOUSETEST.COM', MOUSETEST),
-                   ('VMWTEST.COM', VMWTEST)):
+                   ('VMWTEST.COM', VMWTEST), ('POSTEST.COM', POSTEST),
+                   ('MODETEST.COM', MODETEST), ('MICKTEST.COM', MICKTEST)):
     open(os.path.join(outdir, name), 'wb').write(data)
     print(f'{name}: {len(data)} bytes')

@@ -394,7 +394,7 @@ fi
 # the frontend's exact path - on the other. Differential (exercised vs quiet
 # must differ) plus native==sandbox==rerecord.
 python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
-python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" POSTEST.COM="$work/coms/POSTEST.COM" MODETEST.COM="$work/coms/MODETEST.COM" MICKTEST.COM="$work/coms/MICKTEST.COM" >/dev/null
 inputframes=500
 inputleg() {
 	name="$1"; cmd="$2"; joyflag="$3"; exflag="${4:---exercise}"
@@ -454,6 +454,73 @@ elif [ "$vmwn" != "$vmwb" ]; then
 	echo "FAIL input:vmware-position (native $vmwn vs sandbox $vmwb)"; fail=1
 else
 	echo "PASS input:vmware-position (the guest reads back $vmwn, native==sandbox)"
+fi
+
+# WHERE THE CURSOR ACTUALLY IS, as a number, checked against a position worked
+# out without the core's help (issue #135 follow-up, 2026-09-22). Mouse Position
+# X/Y is a FRACTION of the guest's screen, 0..65535, and the driver resolves it
+# against the range INT 33h keeps for the mode it is in - so these expectations
+# are just  (axis * screen) / 65536  masked by the mode's granularity, computed
+# here and not read back out of anything the driver touched.
+#
+# Before this, the driver divided the axis by a constant 800 while the config
+# declared a 2560 plane, and a HELD position never reached the machine at all:
+# the same build answered 320,96 - the middle of the screen - for every value
+# across the whole declared range.
+mousepos() { # rom com axis -> "x y"
+	rm -rf "$work/mp"; mkdir -p "$work/mp"
+	timeout 900 "$rn" --workdir "$work/mp" --rom "$1" --frames 400 \
+		--mouse-pos "$3" --type "$2
+" --ram-slice 0x4F0 4 "$work/mp.bin" >/dev/null 2>&1
+	python3 -c "
+import sys
+b = open(sys.argv[1], 'rb').read()
+print(b[0] | (b[1] << 8), b[2] | (b[3] << 8))" "$work/mp.bin"
+}
+# 80-column text: the mouse range is 640x200, granularity 8 on both axes
+abs80="$(mousepos "$work/input.iso" 'd:\postest.com' 0)|$(mousepos "$work/input.iso" 'd:\postest.com' 32768)|$(mousepos "$work/input.iso" 'd:\postest.com' 65535)"
+want80="0 0|320 96|632 192"
+# 40-column text: the range HALVES to 320x200, granularity 16 across
+abs40="$(mousepos "$work/input.iso" 'd:\modetest.com' 32768)|$(mousepos "$work/input.iso" 'd:\modetest.com' 65535)"
+want40="160 96|304 192"
+if [ "$abs80" != "$want80" ]; then
+	echo "FAIL input:mouse-absolute (80-column: wanted $want80, got $abs80)"; fail=1
+elif [ "$abs40" != "$want40" ]; then
+	echo "FAIL input:mouse-absolute (40-column: wanted $want40, got $abs40)"; fail=1
+else
+	echo "PASS input:mouse-absolute (the cursor lands where the axis says, and the same axis follows a mode change: $abs80 at 640 wide, $abs40 at 320)"
+fi
+
+# THE TWO PATHS MEASURE IN THE SAME UNITS. A position moved ten pixels and a
+# Mouse Speed of ten pixels are the same movement, so the machine must be told
+# the same thing - which is only true if the position path differences its
+# PIXELS. Differencing the wire instead would leave this about a hundredfold
+# out, and nothing else here would notice, because the absolute cursor would
+# still land in the right place.
+mickeys() { # extra-args... -> accumulated x mickeys
+	rm -rf "$work/mk"; mkdir -p "$work/mk"
+	timeout 900 "$rn" --workdir "$work/mk" --rom "$work/input.iso" --frames 400 \
+		--mouse-pos 32768 "$@" --type 'd:\micktest.com
+' --ram-slice 0x4F0 4 "$work/mk.bin" >/dev/null 2>&1
+	python3 -c "
+import sys
+b = open(sys.argv[1], 'rb').read()
+v = b[0] | (b[1] << 8)
+print(v - 65536 if v > 32767 else v)" "$work/mk.bin"
+}
+mkStill="$(mickeys)"
+mkPos="$(mickeys --mouse-nudge 300:1024)"   # 1024 wire = 10 px at 640 wide
+mkSpd="$(mickeys --mouse-speed 300:10)"
+mkNeg="$(mickeys --mouse-nudge 300:-1024)"
+mkNegSpd="$(mickeys --mouse-speed 300:-10)"
+if [ "$mkStill" != "0" ]; then
+	echo "FAIL input:mouse-units (a held position invented $mkStill mickeys of movement)"; fail=1
+elif [ "$mkPos" != "$mkSpd" ] || [ "$mkNeg" != "$mkNegSpd" ]; then
+	echo "FAIL input:mouse-units (position $mkPos/$mkNeg vs speed $mkSpd/$mkNegSpd for the same ten pixels)"; fail=1
+elif [ "$mkPos" = "0" ]; then
+	echo "FAIL input:mouse-units (ten pixels of movement reached the machine as nothing)"; fail=1
+else
+	echo "PASS input:mouse-units (ten pixels is $mkPos mickeys whether asked for by position or by speed, and a held position is still)"
 fi
 
 # ---- the slots leg ---------------------------------------------------------

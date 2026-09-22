@@ -105,6 +105,54 @@ not blocked on the ABI.
   (the last position is guest memory, so savestates carry it); without it
   Mouse Position X/Y alone never moved the mouse (issue #61).
 
+#### The position plane is a fraction of the screen (2026-09-22)
+
+`Mouse Position X/Y` is `0..65535` with neutral `32768`, the one convention
+every Chimera core uses for an absolute point (chimera
+docs/porting-a-core.md). It is not a pixel count and cannot be: a DOS box
+changes video mode whenever it likes, so no number declared in
+waterbox.config could be the screen. What CAN be is the range INT 33h keeps
+for the mode it is in - `Mouse_AfterNewVideoMode` sets `mouse.min_x/max_x`
+per mode, and functions 07h/08h let the guest move them - and the fraction
+is resolved against that, every frame.
+
+What this replaced was wrong twice over. The config declared a 2560x2048
+plane (BizHawk's `MouseAbsoluteScreenWidth/Height`) and the driver divided
+by a constant 800x600, so an axis at its maximum came out as 3.2x the screen
+width; and the cursor was only written when the position CHANGED, so a held
+position was overwritten by the next mode set and never restored. Measured
+on the same build: every value across the whole declared range answered
+320,96 - the middle of the screen. The axis did not reach the machine at all.
+
+So the position is now asserted EVERY frame, not only when it changes: a
+fraction is not a fixed pixel, and the pixel it means moves when the mode
+does. An axis driven by an explicit `Mouse Speed` is exempt and moves
+relatively, so a movie that steers with speed alone is not dragged back to
+the neutral - which is now the middle of the screen.
+
+`Mouse Speed X/Y` stays relative and stays in PIXELS, which forces the
+position path to difference its pixels rather than its wire: one wire unit
+is about a hundredth of a pixel at 640 wide, so differencing the wire would
+hand the mickey path numbers a hundredfold too large while the absolute
+cursor still landed correctly - a fault nothing but a unit comparison can
+see. `input:mouse-units` in the gate is that comparison.
+
+Proof (`waterbox/tests/gen-testcom.py`, read back through `--ram-slice`):
+`POSTEST.COM` polls INT 33h fn 03h and stores the position in the IACA;
+`MODETEST.COM` does the same after switching to 40-column text, which halves
+the mouse range; `MICKTEST.COM` accumulates fn 0Bh's motion counters.
+`run-native` gained `--mouse-pos`, `--mouse-nudge` and `--mouse-speed` to
+drive them. Every expectation is `(axis * screen) / 65536` masked by the
+mode's granularity, computed outside the core: 0 reads 0,0; 32768 reads
+320,96; 65535 reads 632,192 at 640 wide, and the same values land at 160,96
+and 304,192 at 320 wide. Ten pixels of movement is 30 mickeys whether asked
+for by position or by speed, in both directions, and a held position
+produces none. Negative controls, all reverted: differencing the wire made a
+held position invent 27,200 mickeys (caught by `input:mouse-units`, and
+correctly NOT by `input:mouse-absolute`, since the cursor still landed
+right); resolving against a constant 800 put the midpoint at 400 instead of
+320 and broke both legs.
+
 Chimera: joystick axes ride the existing axis channel (analog, an
 improvement over BizHawk's digital-only sticks); mouse position/speed are
 axes, its buttons are buttons.
