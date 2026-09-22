@@ -138,6 +138,7 @@ int main(int argc, char **argv)
 	unsigned long sliceOff = 0, sliceLen = 0;
 	long holdPosX = -1, holdPosY = -1; // --mouse-pos: hold the position axes here
 	bool printDrive = false; // --print-drive: the current DOS drive when the run ends
+	long dumpFrom = 0; // --dump-from N: --dump-video writes only frames >= N
 	long nudgeFrame = -1, nudgeBy = 0;  // --mouse-nudge FRAME:WIRE
 	long speedFrame = -1, speedBy = 0;  // --mouse-speed FRAME:PIXELS
 	int frames = 600;
@@ -217,6 +218,7 @@ int main(int argc, char **argv)
 			speedBy = colon != nullptr ? strtol(colon + 1, 0, 0) : 0;
 		}
 		else if (!strcmp(argv[i], "--print-drive")) printDrive = true;
+		else if (!strcmp(argv[i], "--dump-from") && i + 1 < argc) dumpFrom = atol(argv[++i]);
 		else if (!strcmp(argv[i], "--gate")) gate = true;
 		else if (!strcmp(argv[i], "--exercise")) exercise = true;
 		else if (!strcmp(argv[i], "--exercise-position")) { exercise = true; exercisePosition = true; }
@@ -384,7 +386,7 @@ int main(int argc, char **argv)
 				(unsigned long long)fnv1a(audio, (size_t)nsamp * 4), nsamp,
 				dosdrv_last_frame_ticks());
 		}
-		if (dumpPrefix && video) {
+		if (dumpPrefix && video && i >= dumpFrom) {
 			char path[1024];
 			snprintf(path, sizeof path, "%s%05d.tga", dumpPrefix, i);
 			writeTga(path, video, w, h);

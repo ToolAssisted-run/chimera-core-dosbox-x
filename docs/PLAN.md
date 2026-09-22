@@ -105,6 +105,36 @@ not blocked on the ABI.
   (the last position is guest memory, so savestates carry it); without it
   Mouse Position X/Y alone never moved the mouse (issue #61).
 
+#### Proven under Windows 3.1 (2026-09-22)
+
+The VMware absolute pointer, end to end, on a real Windows 3.1 install: the
+user's own image, copied, with `C:\WINDOWS\SYSTEM\MOUSE.DRV` replaced by the
+driver upstream names (NattyNarwhal/vmwmouse v0.1, `VMWMOUSE.DRV`, 1,536
+bytes). `SYSTEM.INI` already loads `mouse.drv`, so no INI edit was needed. The
+driver is NOT in this repository and must not be: it carries no licence and is
+built from Microsoft DDK sample code. It was fetched into a scratch directory
+and installed into a scratch copy of the image; the original was only read.
+
+Windows reaches Program Manager at 1024x768 in 2,400 frames. The position is
+held at the centre until then and moved once at frame 2,000 - it has to MOVE,
+because the driver polls the backdoor on the PS/2 interrupt, and a position
+that never changes raises none. The cursor is then found by diffing the frame
+against a run that did not move it:
+
+| Driver | Asked for | Cursor hotspot |
+|---|---|---|
+| VMware (absolute) | x 49152 of 65535 (75%) | (768, 384) - exact |
+| VMware (absolute) | x 16384 (25%) | (256, 384) - exact |
+| stock, relative (control) | x 49152 (75%) | (736, 384) - 32 px short |
+
+The control is the problem issue #135 described, measured: the relative path
+runs the movement through Windows' own acceleration and lands open-loop, off
+target. The absolute driver lands on the pixel, and ignores Mouse Relative
+Sensitivity, as a position should.
+
+The harness: `run-native --dump-from N` writes `--dump-video` frames only from
+N on, so a Windows boot does not cost a gigabyte of TGAs to see its last frame.
+
 #### The position plane is a fraction of the screen (2026-09-22)
 
 `Mouse Position X/Y` is `0..65535` with neutral `32768`, the one convention
