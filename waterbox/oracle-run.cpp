@@ -7,7 +7,7 @@
 // script lines (frames are 0-based; '#' comments):
 //   key F NAME 0|1          set key level from frame F on (NAME = KBD enum name without KBD_, e.g. leftshift, esc, up)
 //   ram F PATH              write the 640 KB conventional memory after frame F
-//   probe SEG OFF [label]   record registers+stack whenever CS:IP == SEG:OFF (hex)
+//   probe SEG OFF [label [PHYS LEN]]   record registers+stack whenever CS:IP == SEG:OFF (hex); PHYS/LEN (hex) add a memory sample (<= 64 bytes)
 //   watch PHYS LEN [label]  record every change of LEN bytes at physical PHYS (hex)
 //   trace F1 F2 PATH        log every instruction executed during frames F1..F2 to PATH (cs:ip + opcode bytes)
 //   inject F whenCS whenIP cs ip ax bx cx dx si di ds es   call cs:ip (hex) with those registers when CS:IP==whenCS:whenIP at/after frame F
@@ -94,19 +94,19 @@ int main(int argc, char **argv) {
 
 	// ---- script ----
 	std::vector<KeyEv> keys; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
-	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> watches;
+	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> probeMem; std::vector<std::pair<uint32_t,uint32_t>> watches;
 	int endFrame = 600;
 	{
 		FILE *f = fopen(scriptPath, "r"); if (!f) { fprintf(stderr, "cannot read %s\n", scriptPath); return 1; }
 		char line[1024];
 		while (fgets(line, sizeof line, f)) {
 			char *h = strchr(line, '#'); if (h) *h = 0;
-			char a[64] = {0}, b[512] = {0}, c[512] = {0}, d[512] = {0}; int n = sscanf(line, "%63s %511s %511s %511s", a, b, c, d);
+			char a[64] = {0}, b[512] = {0}, c[512] = {0}, d[512] = {0}, e5[64] = {0}, e6[64] = {0}; int n = sscanf(line, "%63s %511s %511s %511s %63s %63s", a, b, c, d, e5, e6);
 			if (n < 1) continue;
 			std::string cmd = a;
 			if (cmd == "key" && n >= 4) { int k = keyIndex(c); if (k < 0) { fprintf(stderr, "unknown key %s\n", c); return 2; } keys.push_back({atoi(b), k, atoi(d)}); }
 			else if (cmd == "ram" && n >= 3) rams.push_back({atoi(b), c});
-			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); }
+			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); probeMem.push_back(n >= 6 ? std::make_pair((uint32_t)strtoul(e5, 0, 16), (uint32_t)strtoul(e6, 0, 16)) : std::make_pair(0u, 0u)); }
 			else if (cmd == "watch" && n >= 3) { watches.push_back({(uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16)}); watchLabels.push_back(n >= 4 ? d : ""); }
 			else if (cmd == "trace" && n >= 4) traces.push_back({atoi(b), atoi(c), d});
 			else if (cmd == "inject") {
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
 	if (!dosdrv_boot(cfg, &err)) { fprintf(stderr, "boot failed: %s\n", err.c_str()); return 1; }
 
 	// ---- arm tracer ----
-	for (auto &p : probes) tracer_add_probe(p.first, p.second);
+	for (size_t i = 0; i < probes.size(); i++) { if (probeMem[i].second) tracer_add_probe_mem(probes[i].first, probes[i].second, probeMem[i].first, probeMem[i].second); else tracer_add_probe(probes[i].first, probes[i].second); }
 	for (auto &w : watches) tracer_add_watch(w.first, w.second);
 	FILE *ev = eventsPath ? fopen(eventsPath, "w") : nullptr;
 	if (eventsPath && !ev) { fprintf(stderr, "cannot write %s\n", eventsPath); return 1; }
@@ -172,6 +172,8 @@ int main(int argc, char **argv) {
 				for (int j = 0; j < 32; j++) fprintf(ev, "%02X", e->stack[j]);
 				fprintf(ev, " dsdx=");
 				for (int j = 0; j < 32; j++) fprintf(ev, "%02X", e->dsdx[j]);
+				fprintf(ev, " mem=");
+				{ uint32_t ml = 0; const uint8_t *m = tracer_event_mem(e, &ml); if (ml < 64) { m = e->mem; ml = 64; } for (uint32_t j = 0; j < ml; j++) fprintf(ev, "%02X", m[j]); }
 				fprintf(ev, "\n");
 			} else if (ev && (e->kind == TRACER_INJECT_START || e->kind == TRACER_INJECT_DONE)) {
 				const TracerRegs &r = e->regs;

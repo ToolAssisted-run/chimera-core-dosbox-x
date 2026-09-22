@@ -15,8 +15,9 @@ static uint64_t instrCount = 0;
 static uint32_t cap = 1u << 20;
 static std::vector<TracerEvent> ring;
 static uint32_t head = 0, count = 0, dropped = 0;
+static std::vector<uint8_t> arena;   // large probe samples, cleared with the events
 
-struct Probe { uint16_t cs, ip; };
+struct Probe { uint16_t cs, ip; uint32_t phys, len; };
 struct Watch { uint32_t phys, len, last; };
 static std::vector<Probe> probes;
 static std::vector<Watch> watches;
@@ -88,6 +89,8 @@ void tracer_hook() {
 			tracer_read_regs(&e.regs);
 			PhysPt sp = SegPhys(ss) + reg_sp;
 			for (int i = 0; i < 32; i++) e.stack[i] = phys_readb(sp + i);
+			e.memOff = (uint32_t)arena.size(); e.memLen = probes[p].len;
+			for (uint32_t i = 0; i < probes[p].len; i++) { uint8_t b = phys_readb(probes[p].phys + i); arena.push_back(b); if (i < 64) e.mem[i] = b; }
 			PhysPt dx = SegPhys(ds) + (reg_edx & 0xFFFF);
 			for (int i = 0; i < 32; i++) e.dsdx[i] = phys_readb(dx + i);
 		}
@@ -103,7 +106,11 @@ void tracer_hook() {
 
 int tracer_add_probe(uint16_t cs, uint16_t ip) {
 	if (probes.size() >= 64) return -1;
-	probes.push_back({cs, ip}); recompute(); return (int)probes.size() - 1;
+	probes.push_back({cs, ip, 0, 0}); recompute(); return (int)probes.size() - 1;
+}
+int tracer_add_probe_mem(uint16_t cs, uint16_t ip, uint32_t phys, uint32_t len) {
+	if (probes.size() >= 64 || len > 65536) return -1;
+	probes.push_back({cs, ip, phys, len}); recompute(); return (int)probes.size() - 1;
 }
 int tracer_add_watch(uint32_t phys, uint32_t len) {
 	if (watches.size() >= 64 || len < 1 || len > 4) return -1;
@@ -115,5 +122,6 @@ void tracer_set_capacity(uint32_t n) { cap = n ? n : 1; ring.clear(); head = cou
 uint32_t tracer_event_count() { return count; }
 uint32_t tracer_events_dropped() { return dropped; }
 const TracerEvent *tracer_event(uint32_t i) { return i < count ? &ring[(head + i) % cap] : nullptr; }
-void tracer_events_clear() { head = count = 0; dropped = 0; }
+void tracer_events_clear() { head = count = 0; dropped = 0; arena.clear(); }
+const uint8_t *tracer_event_mem(const TracerEvent *e, uint32_t *len) { if (len) *len = e->memLen; return e->memLen && e->memOff + e->memLen <= arena.size() ? arena.data() + e->memOff : e->mem; }
 uint64_t tracer_instr_count() { return instrCount; }

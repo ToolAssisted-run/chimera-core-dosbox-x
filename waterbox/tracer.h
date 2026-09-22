@@ -23,12 +23,15 @@ struct TracerEvent {
 	uint8_t stack[32];     // probe: bytes at ss:sp
 	uint8_t dsdx[32];      // probe: bytes at ds:dx (DOS call buffers / filenames)
 	uint8_t opcode[8];     // instr: opcode bytes at cs:ip
+	uint8_t mem[64];       // probe: bytes at the probe's sample address (tracer_add_probe_mem), first 64
+	uint32_t memOff, memLen; // probe: the whole sample (up to 64 KiB) in the side arena, see tracer_event_mem()
 };
 
 extern bool tracer_active;            // any probe/watch/log armed
 void tracer_hook();                   // called before every instruction by the CPU core
 
 int  tracer_add_probe(uint16_t cs, uint16_t ip);       // returns probe id (< 64) or -1
+int  tracer_add_probe_mem(uint16_t cs, uint16_t ip, uint32_t phys, uint32_t len); // same, plus a memory sample (len <= 65536)
 int  tracer_add_watch(uint32_t phys, uint32_t len);    // len 1..4; returns watch id or -1
 void tracer_clear();                                   // drop probes, watches, log, events
 void tracer_log_instructions(bool on);                 // record every instruction as TRACER_INSTR
@@ -37,6 +40,7 @@ void tracer_set_capacity(uint32_t events);             // ring size (default 1<<
 uint32_t tracer_event_count();            // events currently held (oldest dropped when full)
 uint32_t tracer_events_dropped();
 const TracerEvent *tracer_event(uint32_t i);
+const uint8_t *tracer_event_mem(const TracerEvent *e, uint32_t *len); // a probe's whole sample (valid until tracer_events_clear)
 void tracer_events_clear();
 uint64_t tracer_instr_count();
 void tracer_read_regs(TracerRegs *out);   // current register file
