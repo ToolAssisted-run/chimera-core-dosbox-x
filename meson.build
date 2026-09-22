@@ -610,6 +610,14 @@ else
     link_with: [chdflac],
     dependencies: [threads, dl])
 
+  # oracle-run: run-native plus a frame script and the execution tracer (decompilation work)
+  executable('oracle-run',
+    dosbox_sources + driver_sources + files('waterbox/oracle-run.cpp', 'waterbox/tracer.cpp'),
+    include_directories: inc,
+    cpp_args: ['-DCHIMERA_TRACER'],  # the CPU hook exists only in this target; core.wbx and run-native are byte-identical to master
+    link_with: [chdflac],
+    dependencies: [threads, dl])
+
   # run-wbx: the standalone sandbox driver the gate uses. Needs miniBox's
   # host library; configure with -Dminibox_dir=<checkout> to build it.
   mbdir = get_option('minibox_dir')
