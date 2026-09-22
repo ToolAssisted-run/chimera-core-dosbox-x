@@ -591,6 +591,37 @@ NOT audited yet: whether the two upstream releases (06.02 -> 08.02) touch
 the mechanisms the patches hook (Normal_Loop shape, mixer output path,
 keyboard pending queue). The first native build (M1) is that audit.
 
+## The gate looks at the binary, not only at the sources (2026-09-22)
+
+Two legs, `wbx:clean` and `wbx:fresh`, both from one afternoon.
+`build-package.sh` refused to package: `check-wbx` found 18 red-zone memory
+operands in `mt32/sha1/sha1.cpp.o`, an object dated 2026-09-08 - two weeks
+before `-mno-red-zone` reached the guest sysroot's `musl-gcc.specs` on
+2026-09-21. **A flag added to a spec file rebuilds nothing.** Ninja sees no
+changed input and skips the object, so twelve of 502 had quietly kept the old
+rules, and this gate had passed 27 of 27 over the top of them, because nothing
+in it had ever looked at the binary.
+
+"Gate green" is not "the artifact conforms" when the conformance check only
+runs at package time, and nobody runs `build-package.sh` between changes. So
+`check-wbx` now runs in the gate, against the same `core.wbx` every other leg
+tests.
+
+`wbx:fresh` is the companion, and the one chimera-core-pcem's gate has carried
+since a guest build that failed under dash was silently packaged as its
+predecessor: a failed build leaves the PREVIOUS `core.wbx` in place, and every
+leg below would then test a machine nobody changed and pass.
+
+Negative controls. `wbx:fresh`: touching `dosbox-driver.cpp` turned it red and
+named the file. `wbx:clean`: a host binary put in `core.wbx`'s place was
+reported with 6,924 red-zone operands. The control that did NOT work is worth
+recording - recompiling sha1.cpp with `-mred-zone` appended produced a
+byte-identical object, because the specs file appends `-mno-red-zone` after the
+user's flags. That is the property the specs delivery was chosen for: it
+reaches every build path whatever that path's own flags say. It is also why the
+only way to get a bad object is to have built it before the specs existed,
+which is exactly what had happened.
+
 ## Bring-up log (2026-08-25, native)
 
 The build is MESON (the user's standard): one root meson.build carries the

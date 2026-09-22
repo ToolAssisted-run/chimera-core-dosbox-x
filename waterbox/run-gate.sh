@@ -14,13 +14,21 @@ root="$(cd "$here/.." && pwd)"
 rn="$root/build/meson-native/run-native"
 rw="$root/build/meson-native/run-wbx"
 core="$root/build/meson-guest/core.wbx"
+mb="${MINIBOX_DIR:-}"
 frames=200
-while getopts "f:" opt; do
+while getopts "f:m:" opt; do
 	case "$opt" in
 		f) frames="$OPTARG" ;;
+		m) mb="$OPTARG" ;;
 		*) exit 2 ;;
 	esac
 done
+if [ -z "$mb" ]; then
+	for candidate in "$root/../chimera" "$HOME/chimera"; do
+		[ -d "$candidate/extern/chimera-common-minibox" ] \
+			&& { mb="$candidate/extern/chimera-common-minibox"; break; }
+	done
+fi
 
 [ -x "$rn" ] || { echo "run-native not built (meson setup build/meson-native -Dminibox_dir=... && ninja)"; exit 1; }
 [ -x "$rw" ] || { echo "run-wbx not built (configure native with -Dminibox_dir=<miniBox>)"; exit 1; }
@@ -36,6 +44,45 @@ digests() { grep -E '^(videoHash|audioHash|domain\[)'; }
 # which a run that skipped the first half cannot possibly match - the second
 # half it did draw is compared instead.
 turboDigests() { grep -E '^(tailVideoHash|audioHash|domain\[)'; }
+
+# ---- the artifact itself ---------------------------------------------------
+# WHAT IS ACTUALLY IN THE core.wbx, as opposed to what the sources say. Both of
+# these legs exist because of the same day: build-package.sh refused to package
+# because check-wbx found 18 red-zone memory operands in mt32/sha1/sha1.cpp.o,
+# an object dated two weeks BEFORE -mno-red-zone was added to the guest
+# sysroot's specs. A flag added to a spec file does not rebuild anything that
+# is already built - ninja sees no changed input and skips it - so twelve
+# objects had quietly kept the old rules, and this gate had passed 27 of 27
+# over the top of them, because nothing here had ever looked at the binary.
+#
+# "Gate green" is not "the artifact conforms" if the conformance check only
+# runs at package time. So it runs here.
+if [ -n "$mb" ] && [ -f "$mb/source/guest/check-wbx.sh" ]; then
+	if wbxout="$(sh "$mb/source/guest/check-wbx.sh" "$core" 2>&1)"; then
+		echo "PASS wbx:clean (${wbxout#*core.wbx })"
+	else
+		echo "FAIL wbx:clean (the built core breaks the guest rules)"
+		echo "$wbxout"; fail=1
+	fi
+else
+	echo "FAIL wbx:clean (no miniBox checkout found; pass -m <dir> or set MINIBOX_DIR)"; fail=1
+fi
+
+# And that the binary is the one these sources describe. A build that fails
+# leaves the PREVIOUS core.wbx in place, and every leg below would then test a
+# machine nobody changed and pass - which is how a broken guest build was once
+# packaged as its predecessor (chimera-core-pcem's gate has carried this leg
+# ever since; this one did not).
+stale=""
+for src in "$here"/*.cpp "$here"/*.c "$here"/*.h "$here"/waterbox.config; do
+	[ -f "$src" ] || continue
+	[ "$src" -nt "$core" ] && stale="$stale $(basename "$src")"
+done
+if [ -z "$stale" ]; then
+	echo "PASS wbx:fresh (core.wbx is newer than every source beside it)"
+else
+	echo "FAIL wbx:fresh (core.wbx is older than:$stale - run ninja -C build/meson-guest)"; fail=1
+fi
 
 # ---- the boot leg ----------------------------------------------------------
 # Power-on to the DOS prompt, nothing pressed, settings at their defaults.
