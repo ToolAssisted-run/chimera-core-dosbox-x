@@ -347,8 +347,8 @@ config = {
         },
         {
             "name": "mouseSensitivity", "display": "Mouse Relative Sensitivity",
-            "description": "For relative mouse inputs, this adjusts the mouse relative speed (mickey) multiplier.",
-            "type": "float", "default": 3.0, "sync": True
+            "description": "Multiplies every relative mouse movement before the machine sees it, in mickeys. It applies to Mouse Speed X/Y and to the movement Mouse Position X/Y implies, so it scales the pointer's whole travel, not its destination: an absolute position still lands where it says, but it takes this many times as many mickeys to get there. Was 3.0, which is the BizHawk integration's value and moved the DOS cursor about three times as far as the host pointer asked for.",
+            "type": "float", "default": 0.5, "sync": True
         },
         {
             "name": "formattedHardDisk", "display": "Mount Formatted Hard Disk Drive",

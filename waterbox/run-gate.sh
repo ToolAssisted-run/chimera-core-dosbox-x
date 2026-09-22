@@ -73,8 +73,13 @@ fi
 # machine nobody changed and pass - which is how a broken guest build was once
 # packaged as its predecessor (chimera-core-pcem's gate has carried this leg
 # ever since; this one did not).
+# Only what core.wbx is COMPILED from. waterbox.config is not an input to it -
+# the frontend reads it out of the package - so listing it here made a leg that
+# no rebuild could satisfy: edit the declaration, and the check stayed red
+# however many times ninja was run. An instrument that cannot be satisfied is
+# worse than no instrument, because the next person learns to ignore it.
 stale=""
-for src in "$here"/*.cpp "$here"/*.c "$here"/*.h "$here"/waterbox.config; do
+for src in "$here"/*.cpp "$here"/*.c "$here"/*.h; do
 	[ -f "$src" ] || continue
 	[ "$src" -nt "$core" ] && stale="$stale $(basename "$src")"
 done
