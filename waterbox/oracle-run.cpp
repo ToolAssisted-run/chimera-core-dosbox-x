@@ -12,6 +12,8 @@
 //   trace F1 F2 PATH        log every instruction executed during frames F1..F2 to PATH (cs:ip + opcode bytes)
 //   inject F whenCS whenIP cs ip ax bx cx dx si di ds es   call cs:ip (hex) with those registers when CS:IP==whenCS:whenIP at/after frame F
 //   poke F PHYS HEXBYTES    write bytes into conventional memory after frame F
+//   shot F PATH             write the screen after frame F as a 24-bit TGA
+//   mem F DOMAIN PATH       write a whole memory domain (index as dosdrv_domain; 0 = conventional) after frame F
 //   end F                   stop after frame F
 #include <cstdio>
 #include <cstdlib>
@@ -93,6 +95,7 @@ int main(int argc, char **argv) {
 	if (!rom || !scriptPath) { fprintf(stderr, "need --rom and --script\n"); return 2; }
 
 	// ---- script ----
+	struct ShotReq { int frame; std::string path; int domain; }; std::vector<ShotReq> shots, mems;
 	struct ProbePokeReq { std::string label; uint32_t hit, phys; std::vector<uint8_t> bytes; }; std::vector<ProbePokeReq> probePokes;
 	std::vector<KeyEv> keys; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
 	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> probeMem; std::vector<std::pair<uint32_t,uint32_t>> watches;
@@ -123,6 +126,8 @@ int main(int argc, char **argv) {
 				for (size_t i = 0; i + 1 < strlen(e5); i += 2) { unsigned x; sscanf(e5 + i, "%2x", &x); r.bytes.push_back((uint8_t)x); }
 				probePokes.push_back(r);
 			}
+			else if (cmd == "shot" && n >= 3) shots.push_back({atoi(b), c, 0});
+			else if (cmd == "mem" && n >= 4) mems.push_back({atoi(b), d, atoi(c)});
 			else if (cmd == "end" && n >= 2) endFrame = atoi(b);
 			else { fprintf(stderr, "bad script line: %s", line); return 2; }
 		}
@@ -198,6 +203,8 @@ int main(int argc, char **argv) {
 		if (!traceOn && traceFile) { fclose(traceFile); traceFile = nullptr; }
 		int w = 0, h = 0; const uint32_t *video = dosdrv_video(&w, &h);
 		if (dumpPrefix && video) { char path[1024]; snprintf(path, sizeof path, "%s%05d.tga", dumpPrefix, fr); writeTga(path, video, w, h); }
+		for (auto &s2 : shots) if (s2.frame == fr && video) writeTga(s2.path.c_str(), video, w, h);
+		for (auto &m2 : mems) if (m2.frame == fr) { const char *dn; uint8_t *dd; uint64_t ds; bool dw; if (dosdrv_domain(m2.domain, &dn, &dd, &ds, &dw)) { writeWholeFile(m2.path, dd, (size_t)ds); fprintf(stderr, "domain %d %s: %llu bytes\n", m2.domain, dn, (unsigned long long)ds); } }
 		for (auto &r : rams) if (r.frame == fr) {
 			const char *dn; uint8_t *dd; uint64_t ds; bool dw;
 			if (dosdrv_domain(0, &dn, &dd, &ds, &dw)) writeWholeFile(r.path, dd, (size_t)ds);
