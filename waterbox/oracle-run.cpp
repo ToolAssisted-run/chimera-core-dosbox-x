@@ -7,7 +7,8 @@
 // script lines (frames are 0-based; '#' comments):
 //   key F NAME 0|1          set key level from frame F on (NAME = KBD enum name without KBD_, e.g. leftshift, esc, up)
 //   ram F PATH              write the 640 KB conventional memory after frame F
-//   probe SEG OFF [label [PHYS LEN]]   record registers+stack whenever CS:IP == SEG:OFF (hex); PHYS/LEN (hex) add a memory sample (<= 64 bytes)
+//   probe SEG OFF [label [PHYS LEN]]   record registers+stack whenever CS:IP == SEG:OFF (hex); PHYS/LEN (hex) add a memory sample
+//                           (PHYS "SSxxxx" = ss:sp+xxxx, "DSxxxx" = ds:xxxx)
 //   watch PHYS LEN [label]  record every change of LEN bytes at physical PHYS (hex)
 //   trace F1 F2 PATH        log every instruction executed during frames F1..F2 to PATH (cs:ip + opcode bytes)
 //   inject F whenCS whenIP cs ip ax bx cx dx si di ds es   call cs:ip (hex) with those registers when CS:IP==whenCS:whenIP at/after frame F
@@ -110,7 +111,7 @@ int main(int argc, char **argv) {
 			std::string cmd = a;
 			if (cmd == "key" && n >= 4) { int k = keyIndex(c); if (k < 0) { fprintf(stderr, "unknown key %s\n", c); return 2; } keys.push_back({atoi(b), k, atoi(d)}); }
 			else if (cmd == "ram" && n >= 3) rams.push_back({atoi(b), c});
-			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); probeMem.push_back(n >= 6 ? std::make_pair((uint32_t)strtoul(e5, 0, 16), (uint32_t)strtoul(e6, 0, 16)) : std::make_pair(0u, 0u)); }
+			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); probeMem.push_back(n >= 6 ? std::make_pair(!strncmp(e5, "SS", 2) ? 0xFFFF0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : !strncmp(e5, "DS", 2) ? 0xFFFE0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : (uint32_t)strtoul(e5, 0, 16), (uint32_t)strtoul(e6, 0, 16)) : std::make_pair(0u, 0u)); }
 			else if (cmd == "watch" && n >= 3) { watches.push_back({(uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16)}); watchLabels.push_back(n >= 4 ? d : ""); }
 			else if (cmd == "trace" && n >= 4) traces.push_back({atoi(b), atoi(c), d});
 			else if (cmd == "inject") {

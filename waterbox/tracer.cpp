@@ -93,7 +93,9 @@ void tracer_hook() {
 			PhysPt sp = SegPhys(ss) + reg_sp;
 			for (int i = 0; i < 32; i++) e.stack[i] = phys_readb(sp + i);
 			e.memOff = (uint32_t)arena.size(); e.memLen = probes[p].len;
-			for (uint32_t i = 0; i < probes[p].len; i++) { uint8_t b = phys_readb(probes[p].phys + i); arena.push_back(b); if (i < 64) e.mem[i] = b; }
+			// a sample address 0xFFFFxxxx is relative to ss:sp, 0xFFFExxxx to ds:0 (the low 16 bits the offset)
+			PhysPt mb = (probes[p].phys >> 16) == 0xFFFF ? sp + (probes[p].phys & 0xFFFF) : (probes[p].phys >> 16) == 0xFFFE ? SegPhys(ds) + (probes[p].phys & 0xFFFF) : probes[p].phys;
+			for (uint32_t i = 0; i < probes[p].len; i++) { uint8_t b = phys_readb(mb + i); arena.push_back(b); if (i < 64) e.mem[i] = b; }
 			PhysPt dx = SegPhys(ds) + (reg_edx & 0xFFFF);
 			for (int i = 0; i < 32; i++) e.dsdx[i] = phys_readb(dx + i);
 			if (probeHits.size() < probes.size()) probeHits.resize(probes.size(), 0);
