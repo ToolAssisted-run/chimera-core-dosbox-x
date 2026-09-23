@@ -51,3 +51,6 @@ void tracer_read_regs(TracerRegs *out);   // current register file
 void tracer_inject(uint16_t whenCs, uint16_t whenIp, const TracerRegs &regs);
 int  tracer_inject_state();               // 0 idle, 1 waiting for the safe point, 2 running, 3 done
 void tracer_poke(uint32_t phys, const uint8_t *data, uint32_t len); // write guest memory
+// Write guest memory when probe `probe` fires for the `hit`-th time (1-based), right after its sample is taken:
+// input synchronized with the program (e.g. a game's per-tick key table) instead of with video frames.
+void tracer_probe_poke(int probe, uint32_t hit, uint32_t phys, const uint8_t *data, uint32_t len);

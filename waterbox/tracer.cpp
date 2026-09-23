@@ -20,6 +20,9 @@ static std::vector<uint8_t> arena;   // large probe samples, cleared with the ev
 struct Probe { uint16_t cs, ip; uint32_t phys, len; };
 struct Watch { uint32_t phys, len, last; };
 static std::vector<Probe> probes;
+static std::vector<uint32_t> probeHits;
+struct ProbePoke { int probe; uint32_t hit, phys; std::vector<uint8_t> bytes; };
+static std::vector<ProbePoke> probePokes;   // sorted by (probe, hit) as added; applied when the hit comes
 static std::vector<Watch> watches;
 
 static void recompute() { tracer_active = logInstr || !probes.empty() || !watches.empty() || injState == 1 || injState == 2; }
@@ -93,6 +96,9 @@ void tracer_hook() {
 			for (uint32_t i = 0; i < probes[p].len; i++) { uint8_t b = phys_readb(probes[p].phys + i); arena.push_back(b); if (i < 64) e.mem[i] = b; }
 			PhysPt dx = SegPhys(ds) + (reg_edx & 0xFFFF);
 			for (int i = 0; i < 32; i++) e.dsdx[i] = phys_readb(dx + i);
+			if (probeHits.size() < probes.size()) probeHits.resize(probes.size(), 0);
+			uint32_t hit = ++probeHits[p];
+			for (const ProbePoke &pp : probePokes) if (pp.probe == (int)p && pp.hit == hit) for (uint32_t i = 0; i < pp.bytes.size(); i++) phys_writeb(pp.phys + i, pp.bytes[i]);
 		}
 	}
 	if (logInstr) {
@@ -116,7 +122,7 @@ int tracer_add_watch(uint32_t phys, uint32_t len) {
 	if (watches.size() >= 64 || len < 1 || len > 4) return -1;
 	watches.push_back({phys, len, readN(phys, len)}); recompute(); return (int)watches.size() - 1;
 }
-void tracer_clear() { probes.clear(); watches.clear(); logInstr = false; head = count = dropped = 0; recompute(); }
+void tracer_clear() { probes.clear(); probeHits.clear(); probePokes.clear(); watches.clear(); logInstr = false; head = count = dropped = 0; recompute(); }
 void tracer_log_instructions(bool on) { logInstr = on; recompute(); }
 void tracer_set_capacity(uint32_t n) { cap = n ? n : 1; ring.clear(); head = count = 0; }
 uint32_t tracer_event_count() { return count; }
@@ -125,3 +131,4 @@ const TracerEvent *tracer_event(uint32_t i) { return i < count ? &ring[(head + i
 void tracer_events_clear() { head = count = 0; dropped = 0; arena.clear(); }
 const uint8_t *tracer_event_mem(const TracerEvent *e, uint32_t *len) { if (len) *len = e->memLen; return e->memLen && e->memOff + e->memLen <= arena.size() ? arena.data() + e->memOff : e->mem; }
 uint64_t tracer_instr_count() { return instrCount; }
+void tracer_probe_poke(int probe, uint32_t hit, uint32_t phys, const uint8_t *data, uint32_t len) { probePokes.push_back({probe, hit, phys, std::vector<uint8_t>(data, data + len)}); }

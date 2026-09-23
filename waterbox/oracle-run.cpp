@@ -93,6 +93,7 @@ int main(int argc, char **argv) {
 	if (!rom || !scriptPath) { fprintf(stderr, "need --rom and --script\n"); return 2; }
 
 	// ---- script ----
+	struct ProbePokeReq { std::string label; uint32_t hit, phys; std::vector<uint8_t> bytes; }; std::vector<ProbePokeReq> probePokes;
 	std::vector<KeyEv> keys; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
 	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> probeMem; std::vector<std::pair<uint32_t,uint32_t>> watches;
 	int endFrame = 600;
@@ -101,7 +102,7 @@ int main(int argc, char **argv) {
 		char line[1024];
 		while (fgets(line, sizeof line, f)) {
 			char *h = strchr(line, '#'); if (h) *h = 0;
-			char a[64] = {0}, b[512] = {0}, c[512] = {0}, d[512] = {0}, e5[64] = {0}, e6[64] = {0}; int n = sscanf(line, "%63s %511s %511s %511s %63s %63s", a, b, c, d, e5, e6);
+			char a[64] = {0}, b[512] = {0}, c[512] = {0}, d[512] = {0}, e5[512] = {0}, e6[64] = {0}; int n = sscanf(line, "%63s %511s %511s %511s %511s %63s", a, b, c, d, e5, e6);
 			if (n < 1) continue;
 			std::string cmd = a;
 			if (cmd == "key" && n >= 4) { int k = keyIndex(c); if (k < 0) { fprintf(stderr, "unknown key %s\n", c); return 2; } keys.push_back({atoi(b), k, atoi(d)}); }
@@ -117,6 +118,11 @@ int main(int argc, char **argv) {
 				injects.push_back(r);
 			}
 			else if (cmd == "poke" && n >= 4) { PokeReq r; r.frame = atoi(b); r.phys = (uint32_t)strtoul(c, 0, 16); for (size_t i = 0; i + 1 < strlen(d); i += 2) { unsigned x; sscanf(d + i, "%2x", &x); r.bytes.push_back((uint8_t)x); } pokes.push_back(r); }
+			else if (cmd == "probepoke" && n >= 5) {   // probepoke LABEL HIT PHYS HEX: write at the HIT-th hit of the probe labelled LABEL
+				ProbePokeReq r; r.label = b; r.hit = (uint32_t)atoi(c); r.phys = (uint32_t)strtoul(d, 0, 16);
+				for (size_t i = 0; i + 1 < strlen(e5); i += 2) { unsigned x; sscanf(e5 + i, "%2x", &x); r.bytes.push_back((uint8_t)x); }
+				probePokes.push_back(r);
+			}
 			else if (cmd == "end" && n >= 2) endFrame = atoi(b);
 			else { fprintf(stderr, "bad script line: %s", line); return 2; }
 		}
@@ -144,6 +150,11 @@ int main(int argc, char **argv) {
 
 	// ---- arm tracer ----
 	for (size_t i = 0; i < probes.size(); i++) { if (probeMem[i].second) tracer_add_probe_mem(probes[i].first, probes[i].second, probeMem[i].first, probeMem[i].second); else tracer_add_probe(probes[i].first, probes[i].second); }
+	for (const auto &pp : probePokes) {
+		int id = -1; for (size_t i = 0; i < probeLabels.size(); i++) if (probeLabels[i] == pp.label) { id = (int)i; break; }
+		if (id < 0) { fprintf(stderr, "probepoke: no probe labelled %s\n", pp.label.c_str()); return 2; }
+		tracer_probe_poke(id, pp.hit, pp.phys, pp.bytes.data(), (uint32_t)pp.bytes.size());
+	}
 	for (auto &w : watches) tracer_add_watch(w.first, w.second);
 	FILE *ev = eventsPath ? fopen(eventsPath, "w") : nullptr;
 	if (eventsPath && !ev) { fprintf(stderr, "cannot write %s\n", eventsPath); return 1; }
