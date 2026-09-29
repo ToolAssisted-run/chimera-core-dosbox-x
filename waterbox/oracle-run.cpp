@@ -3,7 +3,9 @@
 // instruction logs) and an event dump. Output paths are used as given (absolute recommended).
 //
 // usage: oracle-run --workdir DIR --rom FILE [--setting NAME=VALUE]... [--autoexec LINE]...
-//                   --script FILE --events FILE [--dump-video PREFIX] [--verbose]
+//                   --script FILE --events FILE [--dump-video PREFIX] [--fmtrace PATH] [--verbose]
+// --fmtrace: every byte written to the FM chip's ports (0x388-0x38B, 0x220-0x223, 0x228/0x229):
+//            "emulated_ms port value frame" per line
 // script lines (frames are 0-based; '#' comments):
 //   key F NAME 0|1          set key level from frame F on (NAME = KBD enum name without KBD_, e.g. leftshift, esc, up)
 //   ram F PATH              write the 640 KB conventional memory after frame F
@@ -36,6 +38,25 @@
 #include "dosbox-driver.h"
 #include "tracer.h"
 #include <keyboard.h>
+#include <dosbox.h>
+#include <inout.h>
+#include <pic.h>
+
+// the FM chip's port writes, by wrapping those ports' entries in DOSBox-X's handler table (re-wrapped
+// whenever DOSBox-X resolves or caches a handler there)
+extern IO_WriteHandler *io_writehandlers[3][IO_MAX];
+static FILE *fmTrace; static int fmFrame;
+static const uint16_t fmPorts[] = {0x388, 0x389, 0x38A, 0x38B, 0x220, 0x221, 0x222, 0x223, 0x228, 0x229};
+static IO_WriteHandler *fmOld[0x400];
+static void fmWrap(Bitu port, Bitu val, Bitu iolen);
+static void fmArm() {
+	for (uint16_t p : fmPorts) if (io_writehandlers[0][p] != fmWrap) { fmOld[p] = io_writehandlers[0][p]; io_writehandlers[0][p] = fmWrap; }
+}
+static void fmWrap(Bitu port, Bitu val, Bitu iolen) {
+	fprintf(fmTrace, "%.6f %03X %02X %d\n", (double)PIC_FullIndex(), (unsigned)port, (unsigned)(val & 0xFF), fmFrame);
+	fmOld[port](port, val, iolen);
+	fmArm();
+}
 
 static const time_t kSandboxEpoch = 1495889068;
 extern "C" time_t time(time_t *t) { if (t) *t = kSandboxEpoch; return kSandboxEpoch; }
@@ -98,6 +119,7 @@ int main(int argc, char **argv) {
 		else if (!strcmp(argv[i], "--events") && i + 1 < argc) eventsPath = argv[++i];
 		else if (!strcmp(argv[i], "--dump-video") && i + 1 < argc) dumpPrefix = argv[++i];
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
+		else if (!strcmp(argv[i], "--fmtrace") && i + 1 < argc) { if (!(fmTrace = fopen(argv[++i], "w"))) { fprintf(stderr, "cannot write %s\n", argv[i]); return 2; } }
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
 	if (!rom || !scriptPath) { fprintf(stderr, "need --rom and --script\n"); return 2; }
@@ -201,6 +223,7 @@ int main(int argc, char **argv) {
 		for (auto &t : traces) if (fr >= t.f1 && fr <= t.f2) { traceOn = true; if (!traceFile) traceFile = fopen(t.path.c_str(), "w"); }
 		tracer_log_instructions(traceOn);
 		for (auto &r : injects) if (!r.done && r.frame <= fr && tracer_inject_state() != 1 && tracer_inject_state() != 2) { r.done = true; tracer_inject(r.whenCs, r.whenIp, r.regs); }
+		if (fmTrace) { fmFrame = fr; fmArm(); }
 		dosdrv_frame(in);
 		for (auto &a : audios) if (fr >= a.f1 && fr <= a.f2) {
 			if (!a.f && (!(a.f = fopen(a.path.c_str(), "wb")) || !(a.idx = fopen((a.path + ".frames").c_str(), "w")))) { fprintf(stderr, "cannot write %s\n", a.path.c_str()); return 1; }
@@ -247,6 +270,7 @@ int main(int argc, char **argv) {
 		if (verbose && fr % 100 == 0) { fprintf(stderr, "frame %d instr=%llu ticks=%u\n", fr, (unsigned long long)tracer_instr_count(), dosdrv_ticks_elapsed()); }
 	}
 	if (traceFile) fclose(traceFile);
+	if (fmTrace) fclose(fmTrace);
 	if (ev) fclose(ev);
 	for (auto &a : audios) if (a.f) { fclose(a.f); fclose(a.idx); }
 	printf("done frames=%d instructions=%llu\n", endFrame + 1, (unsigned long long)tracer_instr_count());
