@@ -9,12 +9,18 @@
 //   ram F PATH              write the 640 KB conventional memory after frame F
 //   probe SEG OFF [label [PHYS LEN]]   record registers+stack whenever CS:IP == SEG:OFF (hex); PHYS/LEN (hex) add a memory sample
 //                           (PHYS "SSxxxx" = ss:sp+xxxx, "DSxxxx" = ds:xxxx)
+//   probe32 EIP label [PHYS LEN]   like probe, matching the full 32-bit EIP in any code segment (flat protected mode)
 //   watch PHYS LEN [label]  record every change of LEN bytes at physical PHYS (hex)
 //   trace F1 F2 PATH        log every instruction executed during frames F1..F2 to PATH (cs:ip + opcode bytes)
 //   inject F whenCS whenIP cs ip ax bx cx dx si di ds es   call cs:ip (hex) with those registers when CS:IP==whenCS:whenIP at/after frame F
 //   poke F PHYS HEXBYTES    write bytes into conventional memory after frame F
 //   shot F PATH             write the screen after frame F as a 24-bit TGA
 //   mem F DOMAIN PATH       write a whole memory domain (index as dosdrv_domain; 0 = conventional) after frame F
+//   audio F1 F2 PATH        write the mixer output of frames F1..F2 to PATH (raw s16 stereo interleaved, 44100 Hz);
+//                           PATH.frames gets "frame sample_pairs instructions_at_frame_end" per frame
+//   mouse F X Y             absolute mouse position (driver range 0..800 x 0..600) from frame F on; a change is sent as movement
+//   mrel F DX DY            relative mouse movement (mickey speed) on frame F only
+//   button F left|right|middle 0|1   press (1) or release (0) a mouse button on frame F
 //   end F                   stop after frame F
 #include <cstdio>
 #include <cstdlib>
@@ -69,6 +75,7 @@ static int keyIndex(const std::string &n) {
 }
 
 struct KeyEv { int frame, key, level; };
+struct MouseEv { int frame, kind, a, b; };   // kind 0 = absolute pos, 1 = relative, 2 = button (a = 0 left 1 right 2 middle, b = level)
 struct RamDump { int frame; std::string path; };
 struct TraceReq { int f1, f2; std::string path; };
 struct InjectReq { int frame; uint16_t whenCs, whenIp; TracerRegs regs; bool done; };
@@ -97,8 +104,10 @@ int main(int argc, char **argv) {
 
 	// ---- script ----
 	struct ShotReq { int frame; std::string path; int domain; }; std::vector<ShotReq> shots, mems;
+	struct AudioReq { int f1, f2; std::string path; FILE *f, *idx; }; std::vector<AudioReq> audios;
 	struct ProbePokeReq { std::string label; uint32_t hit, phys; std::vector<uint8_t> bytes; }; std::vector<ProbePokeReq> probePokes;
-	std::vector<KeyEv> keys; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
+	struct Probe32Req { uint32_t eip, phys, len; }; std::vector<Probe32Req> probes32; std::vector<std::string> probe32Labels;
+	std::vector<KeyEv> keys; std::vector<MouseEv> mouseEvs; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
 	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> probeMem; std::vector<std::pair<uint32_t,uint32_t>> watches;
 	int endFrame = 600;
 	{
@@ -112,6 +121,7 @@ int main(int argc, char **argv) {
 			if (cmd == "key" && n >= 4) { int k = keyIndex(c); if (k < 0) { fprintf(stderr, "unknown key %s\n", c); return 2; } keys.push_back({atoi(b), k, atoi(d)}); }
 			else if (cmd == "ram" && n >= 3) rams.push_back({atoi(b), c});
 			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); probeMem.push_back(n >= 6 ? std::make_pair(!strncmp(e5, "SS", 2) ? 0xFFFF0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : !strncmp(e5, "DS", 2) ? 0xFFFE0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : (uint32_t)strtoul(e5, 0, 16), (uint32_t)strtoul(e6, 0, 16)) : std::make_pair(0u, 0u)); }
+			else if (cmd == "probe32" && n >= 3) { probes32.push_back({(uint32_t)strtoul(b, 0, 16), n >= 5 ? (uint32_t)strtoul(d, 0, 16) : 0u, n >= 5 ? (uint32_t)strtoul(e5, 0, 16) : 0u}); probe32Labels.push_back(c); }
 			else if (cmd == "watch" && n >= 3) { watches.push_back({(uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16)}); watchLabels.push_back(n >= 4 ? d : ""); }
 			else if (cmd == "trace" && n >= 4) traces.push_back({atoi(b), atoi(c), d});
 			else if (cmd == "inject") {
@@ -129,6 +139,10 @@ int main(int argc, char **argv) {
 			}
 			else if (cmd == "shot" && n >= 3) shots.push_back({atoi(b), c, 0});
 			else if (cmd == "mem" && n >= 4) mems.push_back({atoi(b), d, atoi(c)});
+			else if (cmd == "audio" && n >= 4) audios.push_back({atoi(b), atoi(c), d, nullptr, nullptr});
+			else if (cmd == "mouse" && n >= 4) mouseEvs.push_back({atoi(b), 0, atoi(c), atoi(d)});
+			else if (cmd == "mrel" && n >= 4) mouseEvs.push_back({atoi(b), 1, atoi(c), atoi(d)});
+			else if (cmd == "button" && n >= 4) mouseEvs.push_back({atoi(b), 2, !strcmp(c, "left") ? 0 : !strcmp(c, "right") ? 1 : 2, atoi(d)});
 			else if (cmd == "end" && n >= 2) endFrame = atoi(b);
 			else { fprintf(stderr, "bad script line: %s", line); return 2; }
 		}
@@ -161,6 +175,7 @@ int main(int argc, char **argv) {
 		if (id < 0) { fprintf(stderr, "probepoke: no probe labelled %s\n", pp.label.c_str()); return 2; }
 		tracer_probe_poke(id, pp.hit, pp.phys, pp.bytes.data(), (uint32_t)pp.bytes.size());
 	}
+	for (size_t i = 0; i < probes32.size(); i++) { tracer_add_probe32(probes32[i].eip, probes32[i].phys, probes32[i].len); probeLabels.push_back(probe32Labels[i]); }
 	for (auto &w : watches) tracer_add_watch(w.first, w.second);
 	FILE *ev = eventsPath ? fopen(eventsPath, "w") : nullptr;
 	if (eventsPath && !ev) { fprintf(stderr, "cannot write %s\n", eventsPath); return 1; }
@@ -169,12 +184,31 @@ int main(int argc, char **argv) {
 	FILE *traceFile = nullptr;
 	for (int fr = 0; fr <= endFrame; fr++) {
 		for (auto &k : keys) if (k.frame == fr) in.keys[k.key] = (uint8_t)k.level;
+		in.mouse.speedX = in.mouse.speedY = 0;
+		in.mouse.leftPressed = in.mouse.rightPressed = in.mouse.middlePressed = false;
+		in.mouse.leftReleased = in.mouse.rightReleased = in.mouse.middleReleased = false;
+		for (auto &m : mouseEvs) if (m.frame == fr) {
+			if (m.kind == 0) { in.mouse.posX = m.a; in.mouse.posY = m.b; }
+			else if (m.kind == 1) { in.mouse.speedX = m.a; in.mouse.speedY = m.b; }
+			else {
+				bool *p = m.b ? (m.a == 0 ? &in.mouse.leftPressed : m.a == 1 ? &in.mouse.rightPressed : &in.mouse.middlePressed)
+				              : (m.a == 0 ? &in.mouse.leftReleased : m.a == 1 ? &in.mouse.rightReleased : &in.mouse.middleReleased);
+				*p = true;
+			}
+		}
 		{ int rn = 0, rd = 0; dosdrv_refresh_rate(&rn, &rd); if (rn > 0 && rd > 0) { in.framerateNumerator = rn; in.framerateDenominator = rd; } }
 		bool traceOn = false;
 		for (auto &t : traces) if (fr >= t.f1 && fr <= t.f2) { traceOn = true; if (!traceFile) traceFile = fopen(t.path.c_str(), "w"); }
 		tracer_log_instructions(traceOn);
 		for (auto &r : injects) if (!r.done && r.frame <= fr && tracer_inject_state() != 1 && tracer_inject_state() != 2) { r.done = true; tracer_inject(r.whenCs, r.whenIp, r.regs); }
 		dosdrv_frame(in);
+		for (auto &a : audios) if (fr >= a.f1 && fr <= a.f2) {
+			if (!a.f && (!(a.f = fopen(a.path.c_str(), "wb")) || !(a.idx = fopen((a.path + ".frames").c_str(), "w")))) { fprintf(stderr, "cannot write %s\n", a.path.c_str()); return 1; }
+			int np = 0; const int16_t *pcm = dosdrv_audio(&np);
+			if (pcm && np > 0) fwrite(pcm, 4, (size_t)np, a.f);
+			fprintf(a.idx, "%d %d %llu\n", fr, pcm ? np : 0, (unsigned long long)tracer_instr_count());
+			if (fr == a.f2) { fclose(a.f); fclose(a.idx); a.f = a.idx = nullptr; }
+		}
 		for (auto &r : pokes) if (r.frame == fr) tracer_poke(r.phys, r.bytes.data(), (uint32_t)r.bytes.size());
 		// drain events
 		uint32_t n = tracer_event_count();
@@ -214,6 +248,7 @@ int main(int argc, char **argv) {
 	}
 	if (traceFile) fclose(traceFile);
 	if (ev) fclose(ev);
+	for (auto &a : audios) if (a.f) { fclose(a.f); fclose(a.idx); }
 	printf("done frames=%d instructions=%llu\n", endFrame + 1, (unsigned long long)tracer_instr_count());
 	return 0;
 }

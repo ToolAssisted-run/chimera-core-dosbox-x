@@ -31,7 +31,8 @@ extern bool tracer_active;            // any probe/watch/log armed
 void tracer_hook();                   // called before every instruction by the CPU core
 
 int  tracer_add_probe(uint16_t cs, uint16_t ip);       // returns probe id (< 64) or -1
-int  tracer_add_probe_mem(uint16_t cs, uint16_t ip, uint32_t phys, uint32_t len); // same, plus a memory sample (len <= 65536)
+int  tracer_add_probe_mem(uint16_t cs, uint16_t ip, uint32_t phys, uint32_t len);
+int  tracer_add_probe32(uint32_t eip, uint32_t phys, uint32_t len); // flat protected mode: full EIP, any CS; len 0 = no sample // same, plus a memory sample (len <= 65536)
 int  tracer_add_watch(uint32_t phys, uint32_t len);    // len 1..4; returns watch id or -1
 void tracer_clear();                                   // drop probes, watches, log, events
 void tracer_log_instructions(bool on);                 // record every instruction as TRACER_INSTR

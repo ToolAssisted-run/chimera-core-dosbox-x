@@ -17,7 +17,7 @@ static std::vector<TracerEvent> ring;
 static uint32_t head = 0, count = 0, dropped = 0;
 static std::vector<uint8_t> arena;   // large probe samples, cleared with the events
 
-struct Probe { uint16_t cs, ip; uint32_t phys, len; };
+struct Probe { uint16_t cs, ip; uint32_t phys, len; bool eip32 = false; uint32_t eip = 0; };   // eip32: match the full EIP, any CS (flat protected mode)
 struct Watch { uint32_t phys, len, last; };
 static std::vector<Probe> probes;
 static std::vector<uint32_t> probeHits;
@@ -87,10 +87,10 @@ void tracer_hook() {
 		}
 	}
 	for (uint32_t p = 0; p < probes.size(); p++) {
-		if (probes[p].cs == curCs && probes[p].ip == curIp) {
+		if (probes[p].eip32 ? probes[p].eip == reg_eip : (probes[p].cs == curCs && probes[p].ip == curIp)) {
 			TracerEvent &e = push(); e.kind = TRACER_PROBE; e.id = (uint8_t)p; e.cs = curCs; e.ip = curIp; e.instrCount = instrCount;
 			tracer_read_regs(&e.regs);
-			PhysPt sp = SegPhys(ss) + reg_sp;
+			PhysPt sp = SegPhys(ss) + (probes[p].eip32 ? reg_esp : reg_sp);   // flat protected mode: 32-bit stack
 			for (int i = 0; i < 32; i++) e.stack[i] = phys_readb(sp + i);
 			e.memOff = (uint32_t)arena.size(); e.memLen = probes[p].len;
 			// a sample address 0xFFFFxxxx is relative to ss:sp, 0xFFFExxxx to ds:0 (the low 16 bits the offset)
@@ -119,6 +119,11 @@ int tracer_add_probe(uint16_t cs, uint16_t ip) {
 int tracer_add_probe_mem(uint16_t cs, uint16_t ip, uint32_t phys, uint32_t len) {
 	if (probes.size() >= 64 || len > 65536) return -1;
 	probes.push_back({cs, ip, phys, len}); recompute(); return (int)probes.size() - 1;
+}
+int tracer_add_probe32(uint32_t eip, uint32_t phys, uint32_t len) {
+	if (probes.size() >= 64 || len > 65536) return -1;
+	Probe pr{0, (uint16_t)eip, phys, len}; pr.eip32 = true; pr.eip = eip;
+	probes.push_back(pr); recompute(); return (int)probes.size() - 1;
 }
 int tracer_add_watch(uint32_t phys, uint32_t len) {
 	if (watches.size() >= 64 || len < 1 || len > 4) return -1;
