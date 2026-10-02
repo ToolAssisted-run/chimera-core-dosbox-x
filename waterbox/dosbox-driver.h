@@ -92,8 +92,9 @@ struct DosDrvMachine {
 	bool ibmRomBasic = false;        // IBMBASIC.ROM below the BIOS
 	bool vgaBiosRom = false;         // VGABIOS.BIN instead of the generated video BIOS
 	// Chimera's mouse drivers for Windows on B:, and installed into the
-	// Windows on C: before anything else runs (chimera#135)
-	bool chimeraMouseDriver = false;
+	// Windows on C: before anything else runs (chimera#135); on by default
+	// (user, 2026-10-02)
+	bool chimeraMouseDriver = true;
 	std::string extraConf;   // appended last (a .conf rom's text)
 };
 
@@ -102,6 +103,9 @@ struct DosDrvMachine {
 // is base.conf plus what the settings say, so the grid is the whole truth
 // about what is about to boot.
 std::string dosdrv_compose_conf(const DosDrvMachine &m);
+
+// whether the machine gets the mouse driver disk (and its memory file)
+bool dosdrv_mouse_disk_wanted(const DosDrvMachine &m);
 
 // Applies one SETTING, by its declared name and its value as text, to a
 // machine. The guest reads the settings channel and run-native takes --setting

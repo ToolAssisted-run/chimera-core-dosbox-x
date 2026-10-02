@@ -308,7 +308,7 @@ int main(int argc, char **argv)
 		m.extraConf += "\n[autoexec]\n" + line + "\n";
 	}
 	cfg.confText = dosdrv_compose_conf(m);
-	cfg.chimeraMouseDisk = m.chimeraMouseDriver;
+	cfg.chimeraMouseDisk = dosdrv_mouse_disk_wanted(m);
 	if (getenv("DOSDRV_PRINT_CONF")) fputs(cfg.confText.c_str(), stderr);
 	if (chdir(workdir) != 0) { fprintf(stderr, "cannot enter %s\n", workdir); return 1; }
 

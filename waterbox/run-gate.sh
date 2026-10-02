@@ -688,7 +688,7 @@ crlf() { printf '%s\r\n' "$@"; }
 mdtree() { # name conf-lines... -> $mdw/name.hdd
 	n="$1"; shift
 	{ echo "[autoexec]"; for l in "$@"; do printf '%s\n' "$l"; done; } > "$mdw/$n.conf"
-	timeout 600 "$rn" --workdir "$mdw/w-$n" --formatted-hdd 21mb --extra-conf "$mdw/$n.conf" \
+	timeout 600 "$rn" --workdir "$mdw/w-$n" --formatted-hdd 21mb --setting chimeraMouseDriver=false --extra-conf "$mdw/$n.conf" \
 		--frames 300 --savedata-out "$mdw/sd-$n" >/dev/null 2>&1
 	cp "$mdw/sd-$n/HardDiskDrive.img" "$mdw/$n.hdd" 2>/dev/null
 }

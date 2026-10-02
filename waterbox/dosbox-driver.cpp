@@ -241,6 +241,13 @@ extern "C" FILE *chimera_dcp_open(const char *name, bool *readonly)
 
 static bool wantsDosvFonts(const DosDrvMachine &m) { return m.videoCardType == "jega" || m.extraConf.find("dosv") != std::string::npos; }
 
+// Use Chimera Mouse Driver, where it means something: the drivers and the
+// disk they come on are IBM PC ones, so a PC-98 machine gets neither.
+bool dosdrv_mouse_disk_wanted(const DosDrvMachine &m)
+{
+	return m.chimeraMouseDriver && m.videoCardType.compare(0, 4, "pc98") != 0;
+}
+
 std::string dosdrv_compose_conf(const DosDrvMachine &m)
 {
 	std::string conf((const char *)dosdrv_conf_base, dosdrv_conf_base_len);
@@ -319,7 +326,7 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	// finds Windows itself, writes only what is missing, and says something
 	// only when it wrote. /BOOT: C: then boots its own DOS, which has none of
 	// this core's INT 33h, so Windows 3.x needs VBMOUSE.EXE loaded first.
-	if (m.chimeraMouseDriver) {
+	if (dosdrv_mouse_disk_wanted(m)) {
 		conf += "imgmount b " DOSDRV_MOUSE_DISK " -t floppy\n";
 		if (m.hddMounted && !m.hddIsHdi)
 			conf += m.bootDrive == "c" ? "B:\\INSTALL.EXE /AUTO /BOOT\n" : "B:\\INSTALL.EXE /AUTO\n";

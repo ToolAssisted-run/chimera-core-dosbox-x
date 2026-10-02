@@ -388,6 +388,12 @@ setting that gives them a floppy drive of their own and an installer, and
   resolved against its range every frame, so the bit is true. fn 0Bh's
   mickeys still follow `MOUSE_IsLocked()`, which stays true. Under the
   core's own DOS, Windows 3.1 now needs no TSR at all.
+- **On by default (user, 2026-10-02).** A project that never mentions the
+  setting gets it: stock Windows 98 with no setting in the project landed
+  (768,192) exactly. PC-98 machines are the exception - the drivers and
+  their 1.44 MB disk are IBM PC ones - so `dosdrv_mouse_disk_wanted` leaves
+  them without B:. A movie recorded on an earlier core, with no B: and no
+  installer, needs the setting turned off to replay on the same machine.
 - **Off means off for B:, not for an installed driver.** The port, the
   INT 33h bit and the motion suppression are the core's own and stay; the
   setting only adds the disk and the installer, so an installed driver
