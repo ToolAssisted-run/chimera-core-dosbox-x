@@ -34,7 +34,12 @@ struct DosDrvConfig {
 	// so the GUEST composes its own configuration from settings, and a host
 	// that stages a real file (run-native's work directory) wins.
 	std::string confText;
+	// the driver disk, served from the binary as the memory file
+	// DOSDRV_MOUSE_DISK (Use Chimera Mouse Driver)
+	bool chimeraMouseDisk = false;
 };
+
+#define DOSDRV_MOUSE_DISK "ChimeraMouse.img"
 
 // ---- configuration composition (shared by both builds - the gate compares
 // the machines, so the text must be identical by construction) --------------
@@ -86,6 +91,9 @@ struct DosDrvMachine {
 	bool pc98SoundBios = false;      // SOUND.ROM, the -26K/-86 board's sound BIOS
 	bool ibmRomBasic = false;        // IBMBASIC.ROM below the BIOS
 	bool vgaBiosRom = false;         // VGABIOS.BIN instead of the generated video BIOS
+	// Chimera's mouse drivers for Windows on B:, and installed into the
+	// Windows on C: before anything else runs (chimera#135)
+	bool chimeraMouseDriver = false;
 	std::string extraConf;   // appended last (a .conf rom's text)
 };
 

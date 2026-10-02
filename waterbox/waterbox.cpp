@@ -301,6 +301,7 @@ ECL_EXPORT int Init(void)
 		flag("pc98SoundBios", 0);
 		flag("ibmRomBasic", 0);
 		flag("vgaBiosRom", 0);
+		flag("chimeraMouseDriver", 0);
 	}
 
 	// ---- what the loaded files ARE ----------------------------------------
@@ -395,6 +396,7 @@ ECL_EXPORT int Init(void)
 	}
 
 	cfg.confText = dosdrv_compose_conf(m);
+	cfg.chimeraMouseDisk = m.chimeraMouseDriver;
 
 	// which lights this machine has: the media the project actually mounted
 	registerDriveMedia(m);

@@ -272,18 +272,20 @@ ordinary guest memory that savestates carry.
 The section above fed the pointer and left the driver to the user. That
 left Windows 95 and 98 with nothing to install - vmwmouse and VBADOS are
 Windows 3.x drivers, and vmwmouse carries no licence besides - so issue
-#135 stayed open until the guest side existed. It now ships in
-`guest-tools/`: `chimera-mouse.img`, a floppy with an install note
-(`README.TXT`), built byte-for-byte reproducibly by `make-floppy.py`.
+#135 stayed open until the guest side existed. It lives in `guest-tools/`
+and reaches the machine through the Use Chimera Mouse Driver setting (next
+section); its first shape, a floppy to download and install by hand, lasted
+a day.
 
 **Windows 3.1: VBADOS 0.67, unmodified.** VBMOUSE.EXE (the DOS TSR, which
 asks the VMware backdoor for absolute mode) and VBMOUSE.DRV (the Windows
 driver, which reads the TSR's INT 33h), GPL-2.0, shipped with their source
 archive (tag v0.67) and COPYING. Two things were measured on the way:
 
-- the DRV needs the TSR here. Over DOSBox-X's own INT 33h alone it never
-  sees the absolute bit (the core's `MOUSE_IsLocked()` is always true), and
-  the pointer is flung to x 1023;
+- the DRV needed the TSR at first. Over DOSBox-X's own INT 33h alone it
+  never saw the absolute bit (the core's `MOUSE_IsLocked()` is always true),
+  and the pointer was flung to x 1023. The core now says absolute (next
+  section), and the DRV alone lands exactly where it did with the TSR;
 - the DRV goes through INT 33h's virtual grid and truncates, so the first
   wire value of a pixel mostly lands one pixel short (8192 at 1024 wide
   lands on 127, not 128), while the middle of a pixel,
@@ -325,7 +327,7 @@ Proof, on copies of the user's own installs through chimera-run (Windows
 | Guest | Set up | Asked for | Landed |
 |---|---|---|---|
 | Windows 98 | stock (control) | (768,192) | (672,334): relative, off target |
-| Windows 98 | `A:\CHIMABS.EXE` from the floppy, typed into Start > Run | (768,192) | (768,192), the same frame |
+| Windows 98 | `A:\CHIMABS.EXE` from a floppy, typed into Start > Run | (768,192) | (768,192), the same frame |
 | Windows 98 | the exported disk, rebooted without the floppy | (768,192) | (768,192), the same frame |
 | Windows 95 | installed from the floppy | (768,192) | (768,192), the same frame |
 | Windows 95 | rebooted | (256,576) | (256,576), the same frame once chimabs runs |
@@ -348,9 +350,76 @@ and counts the INT 33h motion a port reader receives for a move that gives
 MICKTEST 30 mickeys: 0. Negative controls, both reverted: without the
 suppression the reader got 30 mickeys (001Eh); with the port never taking
 the X position it read 8000h held and moved.
-`guest-tools:floppy` rebuilds the floppy and compares it with the committed
-one, so a change to anything on it ships only with a regenerated disk (one
-byte added to README.TXT fails it).
+
+#### Use Chimera Mouse Driver: the drivers inside the core (2026-10-02, user-decided)
+
+The user's call, the same day: the drivers ship IN the package, behind a
+setting that gives them a floppy drive of their own and an installer, and
+"the more automatized and core-integrated, the better". So:
+
+- **The disk is in the binary.** `gen-assets.py` imports
+  `guest-tools/make-floppy.py` and embeds the image's head, about 250 KB (the rest
+  of a 1.44 MB floppy is zeros); at boot the driver makes it the memory file
+  `ChimeraMouse.img`, before the seal, so it is ordinary guest memory. Meson
+  lists every file on it as a dependency of the generated header: editing
+  one rebuilds the disk.
+- **B:, which nothing else uses.** A:'s swap chain and the disk-swap inputs
+  stay the project's, and Initial Drive's `auto` never picks B:. Windows 98
+  sees the drive: `B:\INSTALL` typed into Start > Run works.
+- **The installer runs before anything else.** With the setting on and a
+  hard disk mounted, the composed autoexec runs `B:\INSTALL.EXE /AUTO`
+  after the mounts and before the shell moves or `boot c:` - the one moment
+  Windows is certainly not running, so its files may change. `install`
+  (Open Watcom, 16-bit DOS, GPL-2.0-or-later) finds Windows (MSDOS.SYS'
+  WinDir, else C:\WINDOWS), tells 95/98 from 3.x by
+  SYSTEM\VMM32.VXD, and writes only what is missing: CHIMABS.EXE and a
+  `run=` entry for 95/98, VBMOUSE.DRV and `[boot] mouse.drv=vbmouse.drv` for
+  3.x. A disk without Windows is left alone, and /AUTO prints one line only
+  when it changed something. When C: boots its own DOS (`/BOOT`, from
+  bootDrive c) that DOS has none of the core's INT 33h, so for 3.x the TSR
+  goes into the Windows directory and AUTOEXEC.BAT loads it before the first
+  line that starts WIN. Inside Windows 95/98 it starts CHIMABS.EXE, which
+  installs itself the Windows way; inside Windows 3.x it asks for the DOS
+  prompt instead (not exercised).
+- **The core's INT 33h says absolute.** `patches/src/ints/mouse.cpp` sets
+  the MOUSE_ABSOLUTE event bit for any handler that asks for it (only
+  VBADOS' DRV does), instead of only while the host mouse is uncaptured,
+  which this build never is. The cursor INT 33h reports IS Mouse Position,
+  resolved against its range every frame, so the bit is true. fn 0Bh's
+  mickeys still follow `MOUSE_IsLocked()`, which stays true. Under the
+  core's own DOS, Windows 3.1 now needs no TSR at all.
+- **Off means off for B:, not for an installed driver.** The port, the
+  INT 33h bit and the motion suppression are the core's own and stay; the
+  setting only adds the disk and the installer, so an installed driver
+  keeps working with it off, and nothing is ever removed from C:.
+
+Proof, on fresh copies of the user's stock installs with nothing done but
+the setting:
+
+| Guest | How | Asked for | Landed |
+|---|---|---|---|
+| Windows 98 | chimera-run, bootDrive c | (768,192) | (768,192), the same frame |
+| Windows 95 | chimera-run, bootDrive c | (256,576) | (256,576), the same frame |
+| Windows 3.1 | run-native, the core's DOS, `cd windows` + `win` | (768,384) and (128,384), pixel middles | both exact |
+
+Windows 98's WIN.INI differs from the stock one by exactly
+`run=C:\WINDOWS\CHIMABS.EXE`; Windows 3.1's SYSTEM.INI by exactly the
+`[boot]` mouse.drv line (`[boot.description]` untouched), with VBMOUSE.DRV
+in SYSTEM, no TSR and AUTOEXEC.BAT unchanged. The DRV with no TSR measured
+the same as with it: 8224 -> 128 and 49184 -> 768 (middles), 8192 -> 127
+and 49152 -> 767 (edges). Control: upstream's rule for the bit, same disk,
+asked for 768 -> pinned at 1023.
+
+`mouse-driver:install` in the gate builds a Windows 9x tree and a 3.x tree
+out of echo lines on a formatted disk with the setting off, boots each with
+it on, types `B:\INSTALL /AUTO` once more, and reads the export back with
+`tests/fat-read.py`: WIN.INI's `run=` names CHIMABS exactly once,
+SYSTEM.INI changes in `[boot]` only, the copied files are the disk's
+byte for byte, the TSR appears only with bootDrive c (before WIN in
+AUTOEXEC.BAT), and native and sandbox export the same disk. Negative
+controls, both reverted: without the composed /AUTO line the bootDrive c
+checks fail; an installer blind to its own `run=` entry wrote
+`run=C:\WINDOWS\CHIMABS.EXE C:\WINDOWS\CHIMABS.EXE` and failed it.
 
 ### 6. The writable hard disk: in-guest memory file (KEEP)
 

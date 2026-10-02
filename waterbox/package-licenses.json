@@ -6,7 +6,7 @@
   "components": [
     {
       "name": "chimera-core-dosbox-x (integration)",
-      "license": "MIT, with GPL-2.0-or-later patches and driver",
+      "license": "MIT, with GPL-2.0-or-later patches, driver and guest tools",
       "url": "https://github.com/ToolAssisted-run/chimera-core-dosbox-x",
       "commit": "{selfCommit}",
       "file": "LICENSE",
@@ -40,6 +40,15 @@
       "license": "zlib",
       "url": "https://github.com/libsdl-org/SDL_net",
       "file": "extern/vendored/sdlnet/COPYING"
+    },
+    {
+      "name": "VBADOS 0.67 (VBMOUSE.EXE, VBMOUSE.DRV, OEMSETUP.INF, VBMOUSE.EN)",
+      "license": "GPL-2.0",
+      "url": "https://git.javispedro.com/cgit/vbados.git",
+      "commit": "37c2320920bf2de11749370396da23cab0aafa77",
+      "file": "guest-tools/vbados/COPYING",
+      "sourceUrl": "https://git.javispedro.com/cgit/vbados.git/snapshot/vbados-{commit}.tar.gz",
+      "note": "The Windows 3.x mouse driver on the Use Chimera Mouse Driver disk, by Javier S. Pedro: the released 0.67 binaries, unmodified, embedded in the core with their source archive (tag v0.67), which is also on the disk as VBADOS.TGZ."
     },
     {
       "name": "jaffarCommon",

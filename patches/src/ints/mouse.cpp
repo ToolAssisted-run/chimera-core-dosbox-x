@@ -2187,8 +2187,17 @@ static Bitu INT74_Handler(void) {
 
         /* Check for an active Interrupt Handler that will get called */
         if (AllowINT33RMAccess() && (mouse.sub_mask & mouse.event_queue[mouse.events].type)) {
+            /* chimera: the INT 33h cursor here is ALWAYS where Mouse Position
+             * put it (the driver resolves the position against this very
+             * range every frame), so a handler that asks for absolute events
+             * (VBADOS' VBMOUSE.DRV) is told they are absolute. Upstream says
+             * so only while the host mouse is not captured, which this build
+             * never is: MOUSE_IsLocked() is always true here, and must stay
+             * so for fn 0Bh's mickeys. Without this, VBMOUSE.DRV over the
+             * built-in driver integrated mickeys and pinned the pointer at
+             * the right edge (chimera#135). */
             reg_ax=mouse.event_queue[mouse.events].type
-                  | (!MOUSE_IsLocked() ? MOUSE_ABSOLUTE & mouse.sub_mask : 0);
+                  | (MOUSE_ABSOLUTE & mouse.sub_mask);
             reg_bl=mouse.event_queue[mouse.events].buttons;
             reg_bh=GetWheel8bit(); /* CuteMouse wheel extension */
             reg_cx=(uint16_t)POS_X;

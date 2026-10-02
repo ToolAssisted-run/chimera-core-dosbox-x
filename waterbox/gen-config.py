@@ -351,6 +351,11 @@ config = {
             "type": "float", "default": 0.5, "sync": True
         },
         {
+            "name": "chimeraMouseDriver", "display": "Use Chimera Mouse Driver",
+            "description": "Makes Mouse Position place the Windows 3.1, 95 and 98 pointer exactly, instead of nudging it through Windows' own acceleration. Drive B: holds Chimera's mouse drivers and their installer, and before anything else starts the installer puts the right one into the Windows on drive C: (Windows 95/98: CHIMABS.EXE, started from WIN.INI; Windows 3.1: VBADOS' VBMOUSE.DRV). It writes to C: only when the driver is not there yet, and leaves a disk with no Windows alone. Turning this off removes drive B: but not an installed driver. B:\\README.TXT says more, and B:\\INSTALL installs by hand.",
+            "type": "bool", "default": False, "sync": True
+        },
+        {
             "name": "formattedHardDisk", "display": "Mount Formatted Hard Disk Drive",
             "description": "Determines whether to mount an empty writable formatted hard disk in drive C:. The hard disk will be fully located in memory so make sure you have enough RAM available. Its contents are this core's save data (Emulator > Export Save Data). This value will be ignored if a hard disk image (.hdd) is provided.",
             "type": "enum",

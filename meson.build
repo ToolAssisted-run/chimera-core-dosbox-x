@@ -568,10 +568,18 @@ py = find_program('python3')
 conf_assets = custom_target('conf-assets',
   output: 'dosbox_conf_assets.h',
   input: files('waterbox/gen-assets.py'),
+  # the mouse driver disk's files (guest-tools/make-floppy.py FILES)
+  depend_files: files('guest-tools/make-floppy.py', 'guest-tools/README.TXT',
+    'guest-tools/install/INSTALL.EXE', 'guest-tools/install/install.c',
+    'guest-tools/chimabs/CHIMABS.EXE', 'guest-tools/chimabs/chimabs.c',
+    'guest-tools/vbados/VBMOUSE.EXE', 'guest-tools/vbados/VBMOUSE.DRV',
+    'guest-tools/vbados/VBMOUSE.EN', 'guest-tools/vbados/OEMSETUP.INF',
+    'guest-tools/vbados/COPYING', 'guest-tools/vbados/vbados-0.67-src.tar.gz'),
   command: [py, '@INPUT@', '@OUTPUT@',
             meson.current_source_dir() / 'waterbox/conf',
             meson.current_source_dir() / 'waterbox/hdd',
-            meson.current_source_dir() / 'extern/dosbox-x/contrib/fonts'])
+            meson.current_source_dir() / 'extern/dosbox-x/contrib/fonts',
+            meson.current_source_dir() / 'guest-tools'])
 
 driver_sources = files('waterbox/dosbox-driver.cpp') + [conf_assets]
 

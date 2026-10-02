@@ -674,14 +674,63 @@ else
 	echo "PASS input:pointer-port (\"CP\" and X<<16|Y, held and moved; a reader gets no relative motion where MICKTEST got $mkPos mickeys)"
 fi
 
-# THE INSTALL FLOPPY (chimera#135) is committed, so a user can download the
-# one file, and generated, so a change to anything on it that is not followed
-# by regenerating it would ship a stale disk.
-python3 "$root/guest-tools/make-floppy.py" "$work/chimera-mouse.img" >/dev/null
-if cmp -s "$work/chimera-mouse.img" "$root/guest-tools/chimera-mouse.img"; then
-	echo "PASS guest-tools:floppy (chimera-mouse.img is what make-floppy.py builds)"
+# USE CHIMERA MOUSE DRIVER (chimera#135). The setting puts the driver disk in
+# B: and has the composed autoexec run B:\INSTALL /AUTO against C: before
+# anything else. No Windows is licensed here, so a Windows tree is built out
+# of echo lines on a formatted disk with the setting OFF (nothing may install
+# then), and THAT disk is booted with the setting on - natively and in the
+# sandbox, which must export the same disk - before the installer's work is
+# read back out of the export. B:\INSTALL /AUTO typed again afterwards must
+# change nothing: the installer runs at every start.
+mdw="$work/mousedrv"; rm -rf "$mdw"; mkdir -p "$mdw"
+fatread() { python3 "$here/tests/fat-read.py" "$@"; }
+crlf() { printf '%s\r\n' "$@"; }
+mdtree() { # name conf-lines... -> $mdw/name.hdd
+	n="$1"; shift
+	{ echo "[autoexec]"; for l in "$@"; do printf '%s\n' "$l"; done; } > "$mdw/$n.conf"
+	timeout 600 "$rn" --workdir "$mdw/w-$n" --formatted-hdd 21mb --extra-conf "$mdw/$n.conf" \
+		--frames 300 --savedata-out "$mdw/sd-$n" >/dev/null 2>&1
+	cp "$mdw/sd-$n/HardDiskDrive.img" "$mdw/$n.hdd" 2>/dev/null
+}
+mdboot() { # tree out args... -> $mdw/out.hdd, natively
+	t="$1"; o="$2"; shift 2
+	timeout 600 "$rn" --workdir "$mdw/w-$o" --rom "$mdw/$t.hdd" --setting chimeraMouseDriver=true \
+		--frames 400 "$@" --savedata-out "$mdw/sd-$o" >/dev/null 2>&1
+	cp "$mdw/sd-$o/HardDiskDrive.img" "$mdw/$o.hdd" 2>/dev/null
+}
+mdTyped='b:\install /auto
+'
+mdtree tree9x 'md c:\windows' 'md c:\windows\system' 'echo x>c:\windows\system\vmm32.vxd' \
+	'echo [windows]>c:\windows\win.ini' 'echo load=>>c:\windows\win.ini' 'echo run=>>c:\windows\win.ini'
+mdboot tree9x out9x --type "$mdTyped"
+timeout 900 "$rw" "$core" --rom "$mdw/tree9x.hdd" --setting chimeraMouseDriver=true --frames 400 \
+	--type "$mdTyped" --savedata-out "$mdw/sd-box9x" >/dev/null 2>&1
+mdtree tree31 'md c:\windows' 'md c:\windows\system' 'echo [boot]>c:\windows\system.ini' \
+	'echo shell=progman.exe>>c:\windows\system.ini' 'echo mouse.drv=mouse.drv>>c:\windows\system.ini' \
+	'echo [boot.description]>>c:\windows\system.ini' 'echo mouse.drv=Microsoft>>c:\windows\system.ini' \
+	'echo @echo off>c:\autoexec.bat' 'echo cd windows>>c:\autoexec.bat' 'echo win>>c:\autoexec.bat'
+mdboot tree31 out31 --type "$mdTyped"
+mdboot tree31 out31boot --setting bootDrive=c
+md9x0="$(crlf '[windows]' 'load=' 'run=')"; md9x1="$(crlf '[windows]' 'load=' 'run=C:\WINDOWS\CHIMABS.EXE')"
+md310="$(crlf '[boot]' 'shell=progman.exe' 'mouse.drv=mouse.drv' '[boot.description]' 'mouse.drv=Microsoft')"
+md311="$(crlf '[boot]' 'shell=progman.exe' 'mouse.drv=vbmouse.drv' '[boot.description]' 'mouse.drv=Microsoft')"
+mdae0="$(crlf '@echo off' 'cd windows' 'win')"; mdae1="$(crlf '@echo off' 'cd windows' 'C:\WINDOWS\VBMOUSE.EXE' 'win')"
+mdwhy=""
+[ "$(fatread "$mdw/tree9x.hdd" 'WINDOWS\WIN.INI')" = "$md9x0" ] || mdwhy="$mdwhy; the 9x tree is not what was built (or the setting off installed)"
+[ "$(fatread "$mdw/out9x.hdd" 'WINDOWS\WIN.INI')" = "$md9x1" ] || mdwhy="$mdwhy; 9x WIN.INI run= is not exactly CHIMABS once"
+fatread "$mdw/out9x.hdd" 'WINDOWS\CHIMABS.EXE' | cmp -s - "$root/guest-tools/chimabs/CHIMABS.EXE" || mdwhy="$mdwhy; 9x CHIMABS.EXE is not the disk's"
+cmp -s "$mdw/out9x.hdd" "$mdw/sd-box9x/HardDiskDrive.img" || mdwhy="$mdwhy; native and sandbox exported different 9x disks"
+[ "$(fatread "$mdw/out31.hdd" 'WINDOWS\SYSTEM.INI')" = "$md311" ] || mdwhy="$mdwhy; 3.1 SYSTEM.INI is not [boot] mouse.drv=vbmouse.drv alone"
+fatread "$mdw/out31.hdd" 'WINDOWS\SYSTEM\VBMOUSE.DRV' | cmp -s - "$root/guest-tools/vbados/VBMOUSE.DRV" || mdwhy="$mdwhy; 3.1 VBMOUSE.DRV is not the disk's"
+[ "$(fatread "$mdw/out31.hdd" 'AUTOEXEC.BAT')" = "$mdae0" ] && ! fatread "$mdw/out31.hdd" 'WINDOWS\VBMOUSE.EXE' >/dev/null \
+	|| mdwhy="$mdwhy; under the core's own DOS the 3.1 install touched AUTOEXEC.BAT or copied the TSR"
+[ "$(fatread "$mdw/out31boot.hdd" 'AUTOEXEC.BAT')" = "$mdae1" ] || mdwhy="$mdwhy; booting C:, AUTOEXEC.BAT does not load VBMOUSE.EXE before WIN"
+fatread "$mdw/out31boot.hdd" 'WINDOWS\VBMOUSE.EXE' | cmp -s - "$root/guest-tools/vbados/VBMOUSE.EXE" || mdwhy="$mdwhy; booting C:, VBMOUSE.EXE is not the disk's"
+[ "$(fatread "$mdw/tree31.hdd" 'WINDOWS\SYSTEM.INI')" = "$md310" ] || mdwhy="$mdwhy; the 3.1 tree is not what was built"
+if [ -z "$mdwhy" ]; then
+	echo "PASS mouse-driver:install (95/98: CHIMABS + run= once; 3.1: VBMOUSE.DRV + [boot]; TSR only when C: boots; native == sandbox)"
 else
-	echo "FAIL guest-tools:floppy (chimera-mouse.img is stale: run guest-tools/make-floppy.py)"; fail=1
+	echo "FAIL mouse-driver:install (${mdwhy#; })"; fail=1
 fi
 
 # ---- the slots leg ---------------------------------------------------------

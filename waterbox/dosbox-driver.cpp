@@ -311,6 +311,20 @@ std::string dosdrv_compose_conf(const DosDrvMachine &m)
 	}
 	if (m.hddMounted) conf += m.hddIsHdi ? "imgmount c HardDiskDrive.hdi\n" : "imgmount c HardDiskDrive.img\n";
 
+	// ---- Use Chimera Mouse Driver (chimera#135) -------------------------------
+	// The drivers' disk goes in B:, the drive nothing else in a project uses,
+	// so A:'s swap chain and the disk-swap inputs are untouched. Its installer
+	// then runs against C: BEFORE the shell moves and before a boot - the one
+	// moment Windows is certainly not running, so its files may change. It
+	// finds Windows itself, writes only what is missing, and says something
+	// only when it wrote. /BOOT: C: then boots its own DOS, which has none of
+	// this core's INT 33h, so Windows 3.x needs VBMOUSE.EXE loaded first.
+	if (m.chimeraMouseDriver) {
+		conf += "imgmount b " DOSDRV_MOUSE_DISK " -t floppy\n";
+		if (m.hddMounted && !m.hddIsHdi)
+			conf += m.bootDrive == "c" ? "B:\\INSTALL.EXE /AUTO /BOOT\n" : "B:\\INSTALL.EXE /AUTO\n";
+	}
+
 	// ---- where the shell starts ----------------------------------------------
 	// DOSBox-X leaves its shell on Z:, its own virtual drive of built-in
 	// commands, which is never where anything the project supplied lives. The
@@ -445,6 +459,7 @@ bool dosdrv_machine_setting(DosDrvMachine &m, const std::string &name, const std
 	if (name == "pc98SoundBios") return asBool(m.pc98SoundBios);
 	if (name == "ibmRomBasic") return asBool(m.ibmRomBasic);
 	if (name == "vgaBiosRom") return asBool(m.vgaBiosRom);
+	if (name == "chimeraMouseDriver") return asBool(m.chimeraMouseDriver);
 	if (name == "joystick1Enabled") return asBool(m.joystick1);
 	if (name == "joystick2Enabled") return asBool(m.joystick2);
 	return false;
@@ -657,6 +672,19 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 			if (err) *err = "could not open the hard disk drive image";
 			return false;
 		}
+	}
+
+	// The mouse driver disk B: mounts (Use Chimera Mouse Driver): a memory
+	// file made here, before the seal, from the head the binary carries.
+	if (cfg.chimeraMouseDisk) {
+		jaffarCommon::file::MemoryFile *disk = _memFileDirectory.fopen(DOSDRV_MOUSE_DISK, "w");
+		if (disk == nullptr || disk->resize(dosdrv_mouse_disk_size) != 0
+			|| jaffarCommon::file::MemoryFile::fwrite(dosdrv_mouse_disk_head, 1, sizeof dosdrv_mouse_disk_head, disk) != (int64_t)sizeof dosdrv_mouse_disk_head) {
+			if (disk) _memFileDirectory.fclose(disk);
+			if (err) *err = "could not make the mouse driver disk";
+			return false;
+		}
+		_memFileDirectory.fclose(disk);
 	}
 
 	// Dummy SDL drivers: the machine renders and mixes into memory

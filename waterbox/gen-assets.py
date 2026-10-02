@@ -9,12 +9,17 @@ waterbox.config, the frontend resolves a preset into settings before the core
 sees anything, and the .conf files stay in conf/ as the authored reference that
 tools/check-preset-machines.py holds those presets to.
 
-usage: gen-assets.py <output.h> <conf-dir> <hdd-dir> <font-dir>
+It also embeds the Use Chimera Mouse Driver disk, built by
+guest-tools/make-floppy.py: only its head, since the rest of a floppy that
+holds 200 KB is zeros the memory file supplies by itself.
+
+usage: gen-assets.py <output.h> <conf-dir> <hdd-dir> <font-dir> <guest-tools-dir>
 """
+import importlib.util
 import os
 import sys
 
-out, confdir, hdddir, fontdir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+out, confdir, hdddir, fontdir, toolsdir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 
 def carray(name, data):
     lines = [f'static const unsigned char {name}[] = {{']
@@ -63,6 +68,18 @@ for fn in FONTS:
     ident = 'font_' + fn.replace('.', '_')
     chunks.append(f'\t{{ "{fn}", {ident}, sizeof {ident} }},')
 chunks.append('};')
+chunks.append('')
+
+# the mouse driver disk (chimera#135)
+spec = importlib.util.spec_from_file_location('make_floppy', os.path.join(toolsdir, 'make-floppy.py'))
+floppy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(floppy)
+image = floppy.build()
+head = image.rstrip(b'\0')
+head += b'\0' * (-len(head) % 512)
+chunks.append(carray('mouse_disk_head', head))
+chunks.append(f'#define dosdrv_mouse_disk_head mouse_disk_head')
+chunks.append(f'#define dosdrv_mouse_disk_size {len(image)}u')
 chunks.append('')
 
 open(out, 'w').write('\n'.join(chunks))

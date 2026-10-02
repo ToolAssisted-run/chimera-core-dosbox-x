@@ -1,64 +1,47 @@
-CHIMERA ABSOLUTE POINTER FOR WINDOWS 3.1, 95 AND 98
-===================================================
+CHIMERA MOUSE DRIVERS FOR WINDOWS 3.1, 95 AND 98
+================================================
 
-In a Chimera DOSBox-X project, Mouse Position X/Y is a point on the screen:
-0..65535 across and 0..65535 down, whatever the resolution. DOS programs
-that use the INT 33h mouse follow it with nothing installed. Windows keeps
-its own pointer and only hears relative motion, which it accelerates, so
-without help the pointer lands near the target instead of on it. This disk
-is the help.
+This is drive B: of a Chimera DOSBox-X machine with Use Chimera Mouse
+Driver on.
 
-Add chimera-mouse.img to the project as a floppy disk (it is A:), then
-follow the steps for your Windows.
-
-
-WINDOWS 95 AND 98
-
-  1. Start > Run..., type  A:\CHIMABS.EXE  and press Enter.
-  2. A message says it is installed. Press Enter.
-
-CHIMABS.EXE has copied itself into the Windows directory, added itself to
-the run= line in WIN.INI, and started. It starts with Windows from now on.
-To remove it, delete CHIMABS.EXE from the run= line in C:\WINDOWS\WIN.INI.
+Mouse Position X/Y is a point on the screen: 0..65535 across and
+0..65535 down, whatever the resolution. Windows keeps its own pointer,
+and left to itself it only hears relative motion, which it accelerates,
+so the pointer lands near the target instead of on it. The drivers here
+tell Windows where the pointer IS.
 
 
-WINDOWS 3.1 (VBADOS 0.67 by Javier S. Pedro, GPL version 2)
+NOTHING TO DO
 
-A project with a floppy starts its DOS prompt on A:. If the project starts
-Windows from its own autoexec (cd windows, win), set the project's Initial
-Drive setting to c first.
+Before anything else starts, the machine runs B:\INSTALL /AUTO. It finds
+the Windows on C: and installs the right driver if it is not there yet:
 
-  1. Exit Windows. At the DOS prompt:
-       MD C:\VBADOS
-       COPY A:\VBMOUSE.EXE C:\VBADOS
-       COPY A:\VBMOUSE.DRV C:\WINDOWS\SYSTEM
-  2. Start Windows (WIN), open C:\WINDOWS\SYSTEM.INI in Notepad, and in
-     the [boot] section change the mouse.drv= line to
-       mouse.drv=vbmouse.drv
-     ([boot.description] has a mouse.drv= line too; leave that one.)
-     Save, and exit Windows.
-  3. Type  C:\VBADOS\VBMOUSE.EXE  and then  WIN.
+  Windows 95/98  CHIMABS.EXE into the Windows directory, started from
+                 the run= line of WIN.INI.
+  Windows 3.1    VBMOUSE.DRV into SYSTEM, and mouse.drv=vbmouse.drv in
+                 the [boot] section of SYSTEM.INI. When C: boots a DOS
+                 of its own, also VBMOUSE.EXE, loaded from AUTOEXEC.BAT
+                 before WIN.
 
-From now on VBMOUSE.EXE must be loaded before Windows every time: put the
-line  C:\VBADOS\VBMOUSE.EXE  before the line that starts Windows - in the
-project's configuration file ([autoexec]) if the project starts Windows,
-or in C:\AUTOEXEC.BAT if the hard disk boots its own DOS. VBMOUSE.DRV
-without VBMOUSE.EXE sends the pointer to the wrong place.
+It writes nothing when the driver is already there, and leaves a disk
+without Windows alone. Turning the setting off takes this drive away but
+not an installed driver, which keeps working.
 
 
-KEEPING IT
+BY HAND
 
-The install writes to the emulated hard disk. Do it at the start of the
-movie, where it replays like any other input, or do it once and export the
-disk (Emulator > Export Save Data...) to use as the hard disk of the
-project you record in. Shut Windows down before exporting, or Windows 95
-runs ScanDisk on its next start.
+  B:\INSTALL     at a DOS prompt while Windows is not running, or from
+                 Start > Run in Windows 95/98.
+
+To remove the driver: on Windows 95/98, delete CHIMABS.EXE from the run=
+line in C:\WINDOWS\WIN.INI; on Windows 3.1, set mouse.drv=mouse.drv in
+SYSTEM.INI's [boot] section again.
 
 
 WHERE THE POINTER LANDS
 
 The pointer lands on pixel  P = X * width / 65536  (and the same for Y),
-on the same frame the position is set. To be sure of pixel P, ask for the
+on the frame the position is set. To be sure of pixel P, ask for the
 middle of it:
 
        X = (P * 65536 + 32768) / width
@@ -66,6 +49,8 @@ middle of it:
 At 1024x768, pixel 512 across is X = 32800 and pixel 384 down is
 Y = 32810. Windows 95 and 98 land any X inside the pixel on it; Windows
 3.1 can land the first X of a pixel one pixel short, so use the middle.
+Windows 95 and 98 follow a position held still; Windows 3.1 hears it
+when it changes.
 
 
 WHAT STAYS RELATIVE
@@ -77,10 +62,14 @@ position these drivers read. The buttons are unchanged.
 
 FILES
 
-  CHIMABS.EXE   the Windows 95/98 helper (GPL version 2 or later)
+  INSTALL.EXE   the installer (GPL version 2 or later)
+  INSTALL.C     its source
+  CHIMABS.EXE   the Windows 95/98 driver (GPL version 2 or later)
   CHIMABS.C     its source
-  VBMOUSE.EXE   VBADOS 0.67, unmodified: the DOS driver Windows 3.1 needs
-  VBMOUSE.DRV   VBADOS 0.67, unmodified: the Windows 3.1 mouse driver
+  VBMOUSE.DRV   VBADOS 0.67 by Javier S. Pedro, unmodified (GNU GPL
+                version 2): the Windows 3.1 mouse driver
+  VBMOUSE.EXE   VBADOS 0.67: the DOS driver it needs when C: boots its
+                own DOS
   OEMSETUP.INF  VBADOS 0.67: lets Windows Setup install VBMOUSE.DRV
   VBMOUSE.EN    VBMOUSE.EXE's messages and options
   VBADOS.TGZ    the source of VBADOS 0.67 (tag v0.67 of
