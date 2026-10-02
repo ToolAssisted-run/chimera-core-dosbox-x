@@ -267,6 +267,91 @@ the core. The same build with the driver's calls removed reads 8000h,8000h.
 Native and sandbox agree, and the rerecord leg proves the accumulator is
 ordinary guest memory that savestates carry.
 
+#### The guest side: Windows 3.1, 95 and 98 (2026-10-02, issue #135)
+
+The section above fed the pointer and left the driver to the user. That
+left Windows 95 and 98 with nothing to install - vmwmouse and VBADOS are
+Windows 3.x drivers, and vmwmouse carries no licence besides - so issue
+#135 stayed open until the guest side existed. It now ships in
+`guest-tools/`: `chimera-mouse.img`, a floppy with an install note
+(`README.TXT`), built byte-for-byte reproducibly by `make-floppy.py`.
+
+**Windows 3.1: VBADOS 0.67, unmodified.** VBMOUSE.EXE (the DOS TSR, which
+asks the VMware backdoor for absolute mode) and VBMOUSE.DRV (the Windows
+driver, which reads the TSR's INT 33h), GPL-2.0, shipped with their source
+archive (tag v0.67) and COPYING. Two things were measured on the way:
+
+- the DRV needs the TSR here. Over DOSBox-X's own INT 33h alone it never
+  sees the absolute bit (the core's `MOUSE_IsLocked()` is always true), and
+  the pointer is flung to x 1023;
+- the DRV goes through INT 33h's virtual grid and truncates, so the first
+  wire value of a pixel mostly lands one pixel short (8192 at 1024 wide
+  lands on 127, not 128), while the middle of a pixel,
+  `(P + 0.5) * 65536 / W`, lands exactly (0, 128, 256, 640, 768, 1023, and y
+  192 and 384 measured). Patching the TSR's scaling changed nothing, so the
+  binaries ship as released and README.TXT gives the rule instead.
+
+**Windows 95 and 98: a port of our own, and `chimabs`.** A Win32 program
+cannot use VMware's backdoor under Windows 9x: the VMM traps a ring-3 IN
+and performs it itself, in ring 0, and hands back only the value read. The
+backdoor answers in EBX, ECX and EDX, so the program saw EAX 0 and EBX
+untouched. The core therefore offers the position where the value read is
+all there is: a dword read of port 5664h is `X << 16 | Y` on the Mouse
+Position plane, and a word read of 5666h is 5043h ("CP"). It is asserted
+every frame, held or moved, and follows Mouse Position only.
+`guest-tools/chimabs` (GPL-2.0-or-later, no C runtime, imports only
+KERNEL32 and USER32, PE 4.0) polls it every 10 ms and hands it to
+`mouse_event(MOUSEEVENTF_ABSOLUTE)`, whose 0..65535 is the same fraction of
+the screen; Windows 9x maps it as `pixel = X * W / 65536`, so any value
+inside a pixel lands on it. Run from anywhere but the Windows directory it
+installs itself: copies itself there, adds itself to WIN.INI's `run=` (no
+duplicate on a second install), starts that copy and says so. It refuses to
+install on Windows NT (a ring-3 IN faults there) or on a machine without
+the port.
+
+**Told where, not how far.** A guest that places its own pointer must not
+also get the same move as PS/2 motion, or Windows' acceleration adds it a
+second time. So a guest in VMware absolute mode (`vmware_mouse`, which
+VBMOUSE.EXE sets), or one that has read port 5664h within the last 30
+frames, gets no relative motion for an axis Mouse Position drove. The PS/2
+event still fires - it carries the buttons, and it is what wakes VBMOUSE
+to poll the backdoor. Mouse Speed stays relative and does not move the
+port: it is what DirectInput games read. When the reader stops (Windows
+exits to DOS) relative motion comes back by itself.
+
+Proof, on copies of the user's own installs through chimera-run (Windows
+95 and 98) and run-native (3.1), each cursor found by diffing frames:
+
+| Guest | Set up | Asked for | Landed |
+|---|---|---|---|
+| Windows 98 | stock (control) | (768,192) | (672,334): relative, off target |
+| Windows 98 | `A:\CHIMABS.EXE` from the floppy, typed into Start > Run | (768,192) | (768,192), the same frame |
+| Windows 98 | the exported disk, rebooted without the floppy | (768,192) | (768,192), the same frame |
+| Windows 95 | installed from the floppy | (768,192) | (768,192), the same frame |
+| Windows 95 | rebooted | (256,576) | (256,576), the same frame once chimabs runs |
+| Windows 3.1 | README.TXT's steps, files copied from the floppy | (768,384), pixel middles | (768,384), the same frame |
+
+The installer wrote `run=C:\WINDOWS\CHIMABS.EXE` on both (it was empty) and
+copied the exact binary; run again on an installed machine it left `run=`
+alone and the pointer working. On Windows 98, five frames of Mouse Speed
++10 moved the pointer 50 pixels from where the position had put it, with no
+snap back, and a click on the same frame as a move to the Start button
+opened the Start menu. Traps found on the way: a project with a floppy
+starts its shell on A:, so a 3.1 project that does `cd windows` from its
+own autoexec needs Initial Drive c while the floppy is in; and a disk
+exported from a running Windows 95 stops at the ScanDisk prompt on its next
+boot, so README.TXT says to shut down first.
+
+The gate leg `input:pointer-port` (tests/gen-testcom.py `PORTTEST.COM`,
+`PORTMICK.COM`) reads the port held and moved (5043 4000 C000 and C100),
+and counts the INT 33h motion a port reader receives for a move that gives
+MICKTEST 30 mickeys: 0. Negative controls, both reverted: without the
+suppression the reader got 30 mickeys (001Eh); with the port never taking
+the X position it read 8000h held and moved.
+`guest-tools:floppy` rebuilds the floppy and compares it with the committed
+one, so a change to anything on it ships only with a regenerated disk (one
+byte added to README.TXT fails it).
+
 ### 6. The writable hard disk: in-guest memory file (KEEP)
 
 The proven recipe (also the model for chimera's whole savedata design, see

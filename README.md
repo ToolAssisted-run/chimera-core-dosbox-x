@@ -16,6 +16,10 @@ round-trips around every frame. What the machine has:
 - **Full input**: the 100-key keyboard, mouse (absolute + relative, three
   buttons), two game-port joysticks - all through Chimera's wide-input channel
   (a DOS keyboard does not fit a packed button word).
+- **An exact pointer under Windows**: Windows 3.1, 95 and 98 put the pointer
+  where Mouse Position says once the install floppy
+  [`guest-tools/chimera-mouse.img`](guest-tools) is installed in the guest
+  (steps in [`README.TXT`](guest-tools/README.TXT)).
 - **Storage**: floppy, hard disk and CD images load as plain hash-bound
   mounted files (`.img`/`.ima`/`.hdd`/`.iso`/`.cue` and friends); bootable
   floppies boot (`bootDrive` sync setting); the writable hard disk lives in
@@ -92,6 +96,12 @@ The prior art this re-implementation draws on, all by this repository's author:
 - [jaffarCommon](https://github.com/SergioMartin86/jaffarCommon)'s
   `MemoryFileDirectory` (the in-guest writable file layer the hard-disk
   image lives in), vendored as the submodule `extern/jaffarCommon`.
+
+`guest-tools/` holds software that runs INSIDE the emulated machine, under
+the GPL: [VBADOS](https://git.javispedro.com/cgit/vbados.git) 0.67 by Javier
+S. Pedro (GPL-2.0, unmodified binaries with their source archive) and
+`chimabs`, this repository's Windows 95/98 pointer helper
+(GPL-2.0-or-later).
 
 `extern/vendored/` carries the sandbox-adapted SDL2 (zlib license, signal
 handling removed), libco (ISC) and the SDL_net headers (zlib license).

@@ -30,6 +30,7 @@
 #include <mixer.h>
 #include <joystick.h>
 #include <mouse.h>
+#include <inout.h>
 #include <vga.h>
 #include <video.h>
 #include <mem.h>
@@ -78,6 +79,42 @@ extern std::set<KBD_KEYS> _releasedKeys;
 // ---- mouse ----------------------------------------------------------------
 extern int mickey_threshold;
 extern bool user_cursor_locked;
+// Set when a guest driver asks VMware's backdoor for absolute mode (mouse.cpp):
+// VBADOS' VBMOUSE.EXE under DOS and Windows 3.x, and guest-tools/chimabs under
+// Windows 9x. Such a guest reads where the pointer IS from the port.
+extern volatile bool vmware_mouse;
+
+// ---- the Chimera pointer port (chimera#135) --------------------------------
+// VMware's backdoor answers in EBX, ECX and EDX, which a ring-3 program under
+// Windows 9x never sees: the VMM traps its IN and performs the read itself, in
+// ring 0, with its own registers, and hands back only the value read. So the
+// absolute position is also offered where that value is all there is: a dword
+// read of CHIMERA_POINTER_PORT is X << 16 | Y on the 0..65535 plane - Mouse
+// Position's own units, mouse_event(MOUSEEVENTF_ABSOLUTE)'s too - and a word
+// read of CHIMERA_POINTER_ID_PORT is "CP", so a reader can tell it is here.
+// guest-tools/chimabs is the reader.
+//
+// A guest that has read the position within the last CLIENT_FRAMES frames
+// places its own pointer, so Mouse Position stops ALSO reaching it as relative
+// motion. Only the position: Mouse Speed stays relative - it is what a
+// DirectInput game reads - and does not move the port's position, so the
+// two never stack. When the reader stops (Windows exits to DOS) relative
+// motion comes back by itself.
+#define CHIMERA_POINTER_PORT 0x5664u
+#define CHIMERA_POINTER_ID_PORT 0x5666u
+#define CHIMERA_POINTER_ID 0x5043u
+#define CLIENT_FRAMES 30u
+static uint32_t g_pointerWire = 0x80008000u;
+static uint32_t g_frameCount = 0, g_lastPointerRead = 0;
+static bool g_pointerRead = false;
+
+static Bitu ChimeraPointerRead(Bitu port, Bitu iolen)
+{
+	if (port == CHIMERA_POINTER_ID_PORT) return CHIMERA_POINTER_ID;
+	g_pointerRead = true;
+	g_lastPointerRead = g_frameCount;
+	return iolen >= 4 ? g_pointerWire : (g_pointerWire >> 16);
+}
 // Mouse Position X/Y is a point on the guest's screen as a FRACTION of it:
 // 0..65535 across whatever the machine is drawing, neutral 32768 in the middle,
 // which is the one convention every Chimera core uses (chimera
@@ -709,6 +746,13 @@ void dosdrv_frame(const DosDrvInput &f)
 	// the screen width: pointing at the middle of the window put the cursor
 	// 1.6x past the right edge, and the right-hand two thirds of the window
 	// could not be reached at all.
+	// asked for every frame: cheap, and it survives anything that rebuilds the
+	// I/O tables under a running machine
+	IO_RegisterReadHandler(CHIMERA_POINTER_PORT, &ChimeraPointerRead, IO_MA);
+	IO_RegisterReadHandler(CHIMERA_POINTER_ID_PORT, &ChimeraPointerRead, IO_MA);
+	g_frameCount++;
+	const bool pointerClient = g_pointerRead && g_frameCount - g_lastPointerRead <= CLIENT_FRAMES;
+
 	const int32_t screenW = (int32_t)mouse.max_x - (int32_t)mouse.min_x + 1;
 	const int32_t screenH = (int32_t)mouse.max_y - (int32_t)mouse.min_y + 1;
 	const int32_t posPxX = screenW > 0 ? (int32_t)(((int64_t)f.mouse.posX * screenW) / MOUSE_ABS_STEPS) : 0;
@@ -772,9 +816,20 @@ void dosdrv_frame(const DosDrvInput &f)
 	if (mouse.y < (double)mouse.min_y) mouse.y = (double)mouse.min_y;
 	else if (mouse.y > (double)mouse.max_y) mouse.y = (double)mouse.max_y;
 
+	// A GUEST IN ABSOLUTE MODE IS TOLD WHERE, NOT HOW FAR (chimera#135). Once a
+	// driver reads the position from a port, relative motion for the same move
+	// would be applied twice: under Windows 9x, chimabs places the cursor while
+	// Windows' own PS/2 driver would still accelerate the same move into it. So
+	// the PS/2 event still fires - VBMOUSE.EXE reads the VMware port when it
+	// does, and the buttons travel on it - but it carries no motion for an axis
+	// the position drove. VBMOUSE ignores packet motion altogether in absolute
+	// mode and takes a speed through the VMware position (below); chimabs only
+	// follows Mouse Position, so for it a speed stays relative motion.
 	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
-		float adjustedDeltaX = (float)mouseSpeedX * f.mouse.sensitivity;
-		float adjustedDeltaY = (float)mouseSpeedY * f.mouse.sensitivity;
+		const bool absX = vmware_mouse || (pointerClient && posDroveX);
+		const bool absY = vmware_mouse || (pointerClient && posDroveY);
+		float adjustedDeltaX = (float)mouseSpeedX * (absX ? 0.0f : f.mouse.sensitivity);
+		float adjustedDeltaY = (float)mouseSpeedY * (absY ? 0.0f : f.mouse.sensitivity);
 
 		float dx = adjustedDeltaX * mouse.pixelPerMickey_x;
 		float dy = adjustedDeltaY * mouse.pixelPerMickey_y;
@@ -837,6 +892,16 @@ void dosdrv_frame(const DosDrvInput &f)
 		vmAbsY = std::min(std::max(vmAbsY, 0), (int32_t)MOUSE_ABS_MAX);
 		VMWARE_ScreenParams(0, 0, MOUSE_ABS_MAX, MOUSE_ABS_MAX, false);
 		VMWARE_MousePosition((uint16_t)vmAbsX, (uint16_t)vmAbsY);
+	}
+
+	// The Chimera port says where Mouse Position IS, every frame - held or
+	// moved, from the very first frame - and follows nothing else: a speed
+	// stays relative motion for its reader.
+	{
+		const uint32_t px = (uint32_t)std::min(std::max(f.mouse.posX, 0), (int32_t)MOUSE_ABS_MAX);
+		const uint32_t py = (uint32_t)std::min(std::max(f.mouse.posY, 0), (int32_t)MOUSE_ABS_MAX);
+		if (posDroveX) g_pointerWire = (g_pointerWire & 0x0000FFFFu) | (px << 16);
+		if (posDroveY) g_pointerWire = (g_pointerWire & 0xFFFF0000u) | py;
 	}
 
 	// Buttons go to both interfaces; the numbering is the same on each

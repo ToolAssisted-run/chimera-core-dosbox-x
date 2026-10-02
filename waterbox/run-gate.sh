@@ -494,7 +494,7 @@ fi
 # the frontend's exact path - on the other. Differential (exercised vs quiet
 # must differ) plus native==sandbox==rerecord.
 python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
-python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" POSTEST.COM="$work/coms/POSTEST.COM" MODETEST.COM="$work/coms/MODETEST.COM" MICKTEST.COM="$work/coms/MICKTEST.COM" MODEMICK.COM="$work/coms/MODEMICK.COM" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" POSTEST.COM="$work/coms/POSTEST.COM" MODETEST.COM="$work/coms/MODETEST.COM" MICKTEST.COM="$work/coms/MICKTEST.COM" MODEMICK.COM="$work/coms/MODEMICK.COM" PORTTEST.COM="$work/coms/PORTTEST.COM" PORTMICK.COM="$work/coms/PORTMICK.COM" >/dev/null
 inputframes=500
 inputleg() {
 	name="$1"; cmd="$2"; joyflag="$3"; exflag="${4:---exercise}"
@@ -642,6 +642,46 @@ if [ "$mmLeg" = "0 0" ]; then
 	echo "PASS input:mouse-mode-change (a held position halved under by a mode change moved nothing)"
 else
 	echo "FAIL input:mouse-mode-change (a held position across a mode change counted $mmLeg mickeys of motion)"; fail=1
+fi
+
+# THE CHIMERA POINTER PORT (chimera#135). Windows 9x hands a ring-3 program's
+# IN to the VMM, which performs it in ring 0 and returns only the value read,
+# so VMware's backdoor (answers in EBX/ECX/EDX) cannot reach guest-tools'
+# chimabs there. The core offers the position where the value read is all
+# there is: 5666h answers "CP", 5664h is X << 16 | Y, every frame, held or
+# moved. And a guest that reads it places its own pointer, so a moved position
+# must reach it as no relative motion - where MICKTEST, which never reads the
+# port, counted $mkPos mickeys for the same move above.
+portWords() { # args... -> the four words at 0:04F0
+	rm -rf "$work/pt"; mkdir -p "$work/pt"
+	timeout 900 "$rn" --workdir "$work/pt" --rom "$work/input.iso" --frames 400 "$@" \
+		--ram-slice 0x4F0 8 "$work/pt.bin" >/dev/null 2>&1
+	python3 -c "
+import struct, sys
+print(' '.join('%04x' % v for v in struct.unpack('<4H', open(sys.argv[1], 'rb').read())))" "$work/pt.bin"
+}
+ptHeld="$(portWords --mouse-pos 49152:16384 --type 'd:\porttest.com
+')"
+ptMoved="$(portWords --mouse-pos 49152:16384 --mouse-nudge 300:256 --type 'd:\porttest.com
+')"
+ptMick="$(portWords --mouse-pos 32768 --mouse-nudge 300:1024 --type 'd:\portmick.com
+')"
+if [ "$ptHeld" != "5043 4000 c000 0000" ] || [ "$ptMoved" != "5043 4000 c100 0000" ]; then
+	echo "FAIL input:pointer-port (held: $ptHeld, moved: $ptMoved; want 5043 4000 c000 / c100)"; fail=1
+elif [ "$ptMick" != "0000 0000 0000 0000" ]; then
+	echo "FAIL input:pointer-port (a reader of the port still got relative motion: $ptMick)"; fail=1
+else
+	echo "PASS input:pointer-port (\"CP\" and X<<16|Y, held and moved; a reader gets no relative motion where MICKTEST got $mkPos mickeys)"
+fi
+
+# THE INSTALL FLOPPY (chimera#135) is committed, so a user can download the
+# one file, and generated, so a change to anything on it that is not followed
+# by regenerating it would ship a stale disk.
+python3 "$root/guest-tools/make-floppy.py" "$work/chimera-mouse.img" >/dev/null
+if cmp -s "$work/chimera-mouse.img" "$root/guest-tools/chimera-mouse.img"; then
+	echo "PASS guest-tools:floppy (chimera-mouse.img is what make-floppy.py builds)"
+else
+	echo "FAIL guest-tools:floppy (chimera-mouse.img is stale: run guest-tools/make-floppy.py)"; fail=1
 fi
 
 # ---- the slots leg ---------------------------------------------------------

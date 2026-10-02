@@ -176,10 +176,49 @@ MODEMICK = bytes([
     0xEB, 0xF2,                    # jmp loop
 ])
 
+# The Chimera pointer port (chimera#135): a word read of 5666h is "CP", a dword
+# read of 5664h is X << 16 | Y on the 0..65535 plane. Stored at 0:04F0 (the
+# signature) and 0:04F2 (the position), over and over.
+PORTTEST = bytes([
+    0x31, 0xC0,                    # xor ax, ax
+    0x8E, 0xC0,                    # mov es, ax
+    0xBF, 0xF0, 0x04,              # mov di, 04F0h
+    # loop:
+    0xBA, 0x66, 0x56,              # mov dx, 5666h
+    0xED,                          # in ax, dx        (the signature)
+    0x26, 0x89, 0x05,              # mov es:[di], ax
+    0xBA, 0x64, 0x56,              # mov dx, 5664h
+    0x66, 0xED,                    # in eax, dx       (the position)
+    0x66, 0x26, 0x89, 0x45, 0x02,  # mov es:[di+2], eax
+    0xEB, 0xED,                    # jmp loop
+])
+
+# MICKTEST, reading the pointer port as it goes: a guest that reads the
+# position places its own pointer, so a moved position must reach it as no
+# relative motion at all (where MICKTEST, which never reads it, counts some).
+PORTMICK = bytes([
+    0xB8, 0x00, 0x00,              # mov ax, 0
+    0xCD, 0x33,                    # int 33h
+    0x31, 0xC0,                    # xor ax, ax
+    0x8E, 0xC0,                    # mov es, ax
+    0xBF, 0xF0, 0x04,              # mov di, 04F0h
+    0x26, 0xC7, 0x05, 0x00, 0x00,  # mov word es:[di], 0
+    0x26, 0xC7, 0x45, 0x02, 0x00, 0x00,  # mov word es:[di+2], 0
+    # loop:
+    0xBA, 0x64, 0x56,              # mov dx, 5664h
+    0x66, 0xED,                    # in eax, dx       (a reader of the position)
+    0xB8, 0x0B, 0x00,              # mov ax, 0Bh      (read motion counters)
+    0xCD, 0x33,                    # int 33h          -> CX dx, DX dy
+    0x26, 0x01, 0x0D,              # add es:[di], cx
+    0x26, 0x01, 0x55, 0x02,        # add es:[di+2], dx
+    0xEB, 0xED,                    # jmp loop
+])
+
 os.makedirs(outdir, exist_ok=True)
 for name, data in (('JOYTEST.COM', JOYTEST), ('MOUSETEST.COM', MOUSETEST),
                    ('VMWTEST.COM', VMWTEST), ('POSTEST.COM', POSTEST),
                    ('MODETEST.COM', MODETEST), ('MICKTEST.COM', MICKTEST),
-                   ('MODEMICK.COM', MODEMICK)):
+                   ('MODEMICK.COM', MODEMICK), ('PORTTEST.COM', PORTTEST),
+                   ('PORTMICK.COM', PORTMICK)):
     open(os.path.join(outdir, name), 'wb').write(data)
     print(f'{name}: {len(data)} bytes')
