@@ -183,6 +183,22 @@ correctly NOT by `input:mouse-absolute`, since the cursor still landed
 right); resolving against a constant 800 put the midpoint at 400 instead of
 320 and broke both legs.
 
+**Both pixels are this frame's (2026-10-02, chimera#176).** Differencing
+pixels was right, but the driver kept LAST frame's pixel - resolved against
+the INT 33h range of last frame's mode. The range moves with the mode, so a
+mode change under a position nobody moved was differenced into motion:
+Windows 98 boots through a 512x200 range into a 640x400 one, and an X-only
+nudge reached its relative driver with a 100-pixel Y move beside it (the
+reporter's arithmetic: floor(32768 * 400 / 65536) - 100). The driver now keeps
+the last WIRE position and resolves it against the current range before
+differencing, so an axis that did not change moves nothing whatever the mode
+does, and a real move is still counted in pixels. `MODEMICK.COM` (MICKTEST
+across a switch to 40 columns, which halves the range) is the leg
+`input:mouse-mode-change`: the old driver counted -480 mickeys of motion for a
+position held still, the fixed one 0. On the reporter's own project and
+w98.hdd, the same inputs left the old core's cursor at about (575,265) and the
+fixed core's at about (511,365): the +63/100 the report measured.
+
 Chimera: joystick axes ride the existing axis channel (analog, an
 improvement over BizHawk's digital-only sticks); mouse position/speed are
 axes, its buttons are buttons.

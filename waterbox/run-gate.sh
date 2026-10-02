@@ -494,7 +494,7 @@ fi
 # the frontend's exact path - on the other. Differential (exercised vs quiet
 # must differ) plus native==sandbox==rerecord.
 python3 "$here/tests/gen-testcom.py" "$work/coms" >/dev/null
-python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" POSTEST.COM="$work/coms/POSTEST.COM" MODETEST.COM="$work/coms/MODETEST.COM" MICKTEST.COM="$work/coms/MICKTEST.COM" >/dev/null
+python3 "$here/tests/gen-testiso.py" "$work/input.iso" 	JOYTEST.COM="$work/coms/JOYTEST.COM" MOUSETEST.COM="$work/coms/MOUSETEST.COM" VMWTEST.COM="$work/coms/VMWTEST.COM" POSTEST.COM="$work/coms/POSTEST.COM" MODETEST.COM="$work/coms/MODETEST.COM" MICKTEST.COM="$work/coms/MICKTEST.COM" MODEMICK.COM="$work/coms/MODEMICK.COM" >/dev/null
 inputframes=500
 inputleg() {
 	name="$1"; cmd="$2"; joyflag="$3"; exflag="${4:---exercise}"
@@ -621,6 +621,27 @@ elif [ "$mkPos" = "0" ]; then
 	echo "FAIL input:mouse-units (ten pixels of movement reached the machine as nothing)"; fail=1
 else
 	echo "PASS input:mouse-units (ten pixels is $mkPos mickeys whether asked for by position or by speed, and a held position is still)"
+fi
+
+# A HELD POSITION STAYS STILL ACROSS A MODE CHANGE (chimera#176). The INT 33h
+# range is what an axis resolves against, and it changes with the video mode:
+# Windows 98 booted through 512x200 into 640x400, and an X-only nudge reached
+# the guest with a 100-pixel Y move, because the driver differenced a pixel of
+# the old range against a pixel of the new one. MODEMICK halves the range under
+# a position held at the middle; the counters must read no motion at all.
+mmLeg="$(rm -rf "$work/mm"; mkdir -p "$work/mm"
+	timeout 900 "$rn" --workdir "$work/mm" --rom "$work/input.iso" --frames 400 \
+		--mouse-pos 32768 --type 'd:\modemick.com
+' --ram-slice 0x4F0 4 "$work/mm.bin" >/dev/null 2>&1
+	python3 -c "
+import sys
+b = open(sys.argv[1], 'rb').read()
+s = lambda v: v - 65536 if v > 32767 else v
+print(s(b[0] | (b[1] << 8)), s(b[2] | (b[3] << 8)))" "$work/mm.bin")"
+if [ "$mmLeg" = "0 0" ]; then
+	echo "PASS input:mouse-mode-change (a held position halved under by a mode change moved nothing)"
+else
+	echo "FAIL input:mouse-mode-change (a held position across a mode change counted $mmLeg mickeys of motion)"; fail=1
 fi
 
 # ---- the slots leg ---------------------------------------------------------

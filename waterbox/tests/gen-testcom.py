@@ -154,9 +154,32 @@ MICKTEST = bytes([
     0xEB, 0xF2,                    # jmp loop
 ])
 
+# MICKTEST across a mode change (chimera#176): the INT 33h range halves when
+# 40-column text is set, under a position the frontend holds still. Nothing
+# moved, so the counters must read nothing - a driver that differences pixels
+# of the old range against pixels of the new one counts the change as motion.
+MODEMICK = bytes([
+    0xB8, 0x00, 0x00,              # mov ax, 0
+    0xCD, 0x33,                    # int 33h          (reset: 80 columns, 640x200)
+    0x31, 0xC0,                    # xor ax, ax
+    0x8E, 0xC0,                    # mov es, ax
+    0xBF, 0xF0, 0x04,              # mov di, 04F0h
+    0x26, 0xC7, 0x05, 0x00, 0x00,  # mov word es:[di], 0
+    0x26, 0xC7, 0x45, 0x02, 0x00, 0x00,  # mov word es:[di+2], 0
+    0xB8, 0x01, 0x00,              # mov ax, 0001h    (40x25 text: 320x200)
+    0xCD, 0x10,                    # int 10h
+    # loop:
+    0xB8, 0x0B, 0x00,              # mov ax, 0Bh      (read motion counters)
+    0xCD, 0x33,                    # int 33h          -> CX dx, DX dy
+    0x26, 0x01, 0x0D,              # add es:[di], cx
+    0x26, 0x01, 0x55, 0x02,        # add es:[di+2], dx
+    0xEB, 0xF2,                    # jmp loop
+])
+
 os.makedirs(outdir, exist_ok=True)
 for name, data in (('JOYTEST.COM', JOYTEST), ('MOUSETEST.COM', MOUSETEST),
                    ('VMWTEST.COM', VMWTEST), ('POSTEST.COM', POSTEST),
-                   ('MODETEST.COM', MODETEST), ('MICKTEST.COM', MICKTEST)):
+                   ('MODETEST.COM', MODETEST), ('MICKTEST.COM', MICKTEST),
+                   ('MODEMICK.COM', MODEMICK)):
     open(os.path.join(outdir, name), 'wb').write(data)
     print(f'{name}: {len(data)} bytes')

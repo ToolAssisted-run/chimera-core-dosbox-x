@@ -727,16 +727,28 @@ void dosdrv_frame(const DosDrvInput &f)
 	// 1/65536 of the screen - about a hundredth of a pixel at 640 wide - so
 	// differencing the wire would hand the mickey path numbers about a hundred
 	// times too large, and a one-pixel nudge would fly across the screen.
-	// -1 is "no previous pixel", so the very first frame always asserts. Without
-	// it a movie that holds the position at exactly the starting value - zero,
-	// the left edge - produces no delta on any frame and never places the
-	// cursor at all.
-	static int32_t lastPosPxX = -1, lastPosPxY = -1;
+	//
+	// But both pixels are this frame's: what is remembered is the last WIRE
+	// position, resolved again against the range INT 33h has NOW. The range
+	// moves with the video mode, and remembering last frame's pixel instead
+	// differenced a pixel of the old range against one of the new - so a mode
+	// change under a position nobody moved was sent as motion. Windows 98 boots
+	// through 512x200 into 640x400, and an X-only nudge reached its relative
+	// driver with a 100-pixel Y move on the side (chimera#176). An axis that did
+	// not change now moves nothing, whatever the mode does.
+	//
+	// -1 is "no previous position", so the very first frame always asserts.
+	// Without it a movie that holds the position at exactly the starting value
+	// - zero, the left edge - produces no delta on any frame and never places
+	// the cursor at all.
+	static int32_t lastPosX = -1, lastPosY = -1;
+	const int32_t lastPxX = screenW > 0 && lastPosX >= 0 ? (int32_t)(((int64_t)lastPosX * screenW) / MOUSE_ABS_STEPS) : 0;
+	const int32_t lastPxY = screenH > 0 && lastPosY >= 0 ? (int32_t)(((int64_t)lastPosY * screenH) / MOUSE_ABS_STEPS) : 0;
 	const bool posDroveX = f.mouse.speedX == 0, posDroveY = f.mouse.speedY == 0;
-	const int32_t mouseSpeedX = !posDroveX ? f.mouse.speedX : (lastPosPxX < 0 ? 0 : posPxX - lastPosPxX);
-	const int32_t mouseSpeedY = !posDroveY ? f.mouse.speedY : (lastPosPxY < 0 ? 0 : posPxY - lastPosPxY);
-	lastPosPxX = posPxX;
-	lastPosPxY = posPxY;
+	const int32_t mouseSpeedX = !posDroveX ? f.mouse.speedX : (lastPosX < 0 ? 0 : posPxX - lastPxX);
+	const int32_t mouseSpeedY = !posDroveY ? f.mouse.speedY : (lastPosY < 0 ? 0 : posPxY - lastPxY);
+	lastPosX = f.mouse.posX;
+	lastPosY = f.mouse.posY;
 
 	// AN ABSOLUTE POSITION IS ASSERTED EVERY FRAME, not only when it changes.
 	// A fraction of the screen is not a fixed pixel: the same 32768 is pixel
