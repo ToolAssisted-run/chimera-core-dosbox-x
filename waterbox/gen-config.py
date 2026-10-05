@@ -301,9 +301,81 @@ FIRMWARE = [
 ]
 
 
+# ---- what the controls and the system are called ----
+# The frontend keeps no table of these: a core says what its own are called.
+# MNEMONICS is the letter each button writes into a movie's text and heads its
+# input column with, by the button's name - whole, or without its player ("P2
+# Up" is found under "Up"), so one line serves every pad. AXIS_HEADERS is the
+# short header of each axis's column. (An entry is read by position: a letter
+# may change and no movie made before it is harmed.)
+MNEMONICS = {
+    "Joystick Up": "U", "Joystick Down": "D", "Joystick Left": "L", "Joystick Right": "R",
+    "Joystick Button 1": "1", "Joystick Button 2": "2", "Mouse Left Button": "l",
+    "Mouse Middle Button": "m", "Mouse Right Button": "r", "Previous Floppy Disk": "<",
+    "Next Floppy Disk": ">", "Swap Floppy Disk": "v", "Previous CDROM": "{", "Next CDROM": "}",
+    "Swap CDROM": "w", "Key 1": "1", "Key 2": "2", "Key 3": "3", "Key 4": "4", "Key 5": "5",
+    "Key 6": "6", "Key 7": "7", "Key 8": "8", "Key 9": "9", "Key 0": "0", "Key Q": "Q",
+    "Key W": "W", "Key E": "E", "Key R": "R", "Key T": "T", "Key Y": "Y", "Key U": "U",
+    "Key I": "I", "Key O": "O", "Key P": "P", "Key A": "A", "Key S": "S", "Key D": "D",
+    "Key F": "F", "Key G": "G", "Key H": "H", "Key J": "J", "Key K": "K", "Key L": "L",
+    "Key Z": "Z", "Key X": "X", "Key C": "C", "Key V": "V", "Key B": "B", "Key N": "N",
+    "Key M": "M", "Key F1": "1", "Key F2": "2", "Key F3": "3", "Key F4": "4", "Key F5": "5",
+    "Key F6": "6", "Key F7": "7", "Key F8": "8", "Key F9": "9", "Key F10": "0", "Key F11": "1",
+    "Key F12": "2", "Key Escape": "e", "Key Tab": "t", "Key Backspace": "b", "Key Enter": "e",
+    "Key Space": "s", "Key LeftAlt": "a", "Key RightAlt": "a", "Key LeftCtrl": "c",
+    "Key RightCtrl": "c", "Key LeftShift": "s", "Key RightShift": "s", "Key CapsLock": "C",
+    "Key ScrollLock": "S", "Key NumLock": "N", "Key Grave": "`", "Key Minus": "-",
+    "Key Equals": "=", "Key Backslash": "b", "Key LeftBracket": "[", "Key RightBracket": "]",
+    "Key Semicolon": ";", "Key Quote": "'", "Key Period": "p", "Key Comma": ",", "Key Slash": "/",
+    "Key ExtraLtGt": ">", "Key PrintScreen": "p", "Key Pause": "P", "Key Insert": "i",
+    "Key Home": "h", "Key Pageup": "p", "Key Delete": "d", "Key End": "e", "Key Pagedown": "p",
+    "Key Left": "<", "Key Up": "^", "Key Down": "v", "Key Right": ">", "Key KeyPad1": "1",
+    "Key KeyPad2": "2", "Key KeyPad3": "3", "Key KeyPad4": "4", "Key KeyPad5": "5",
+    "Key KeyPad6": "6", "Key KeyPad7": "7", "Key KeyPad8": "8", "Key KeyPad9": "9",
+    "Key KeyPad0": "0", "Key KeyPadDivide": "/", "Key KeyPadMultiply": "*", "Key KeyPadMinus": "-",
+    "Key KeyPadPlus": "+", "Key KeyPadEnter": "e", "Key KeyPadPeriod": "p",
+}
+AXIS_HEADERS = {
+    "Mouse Position X": "mpX", "Mouse Position Y": "mpY", "Mouse Speed X": "msX",
+    "Mouse Speed Y": "msY",
+}
+SYSTEM_NAMES = {
+    "DOS": "MS-DOS",
+}
+
+
+def _bare(name):
+    """A control's name without its player: "P2 Up" -> "Up"."""
+    head, _, rest = name.partition(" ")
+    return rest if rest and head[:1] == "P" and head[1:].isdigit() else name
+
+
+def mnemonics_for(buttons):
+    """The "mnemonics" of an input declaration: a letter for every one of its
+    buttons, and for nothing else. A button nobody gave a letter stops the
+    build - the engine would give it its rule's guess, and two columns of one
+    pad would share a letter with nobody having decided it."""
+    out = {}
+    for b in buttons:
+        key = b if b in MNEMONICS else _bare(b)
+        if key not in MNEMONICS:
+            raise SystemExit("no mnemonic for the button %r (MNEMONICS in %s)" % (b, __file__))
+        out[key] = MNEMONICS[key]
+    return out
+
+
+def with_headers(axes):
+    """The axes with their column headers; an axis nobody named stops the build."""
+    missing = [a["name"] for a in axes if a["name"] not in AXIS_HEADERS]
+    if missing:
+        raise SystemExit("no header for the axes %s (AXIS_HEADERS in %s)" % (missing, __file__))
+    return [dict(a, header=AXIS_HEADERS[a["name"]]) for a in axes]
+
+
 config = {
     "coreName": "DOSBox-X",
     "systemId": "DOS",
+    "systemNames": SYSTEM_NAMES,
     "author": "DOSBox-X team; chimera port by Sergio Martin",
     "url": "https://github.com/ToolAssisted-run/chimera-core-dosbox-x",
     "romFile": "rom",
@@ -321,7 +393,8 @@ config = {
         "name": "DOSBox Controller",
         "_comment": "index order is the wire format, imported from BizHawk's controller definition: joysticks, mouse buttons, disk-swap controls, then the 102-key keyboard (KBD_KEYS 1..102, see gen-config.py). Wider than 64, so everything rides the SetButton channel.",
         "buttons": buttons,
-        "axes": axes,
+        "mnemonics": mnemonics_for(buttons),
+        "axes": with_headers(axes),
         "_axes_note": "Mouse position is an absolute point on the guest screen, 0..65535 across whatever the machine is drawing right now - a DOS box changes video mode whenever it likes, so the wire carries a fraction and the driver converts it against the live mode. Speed is the per-frame relative movement, in guest pixels. The frontend feeds these through SetAxis before every frame."
     },
     "extensions": {
