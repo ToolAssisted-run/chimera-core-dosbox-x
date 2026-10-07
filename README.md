@@ -49,7 +49,19 @@ proves the packaged core inside the Chimera frontend itself, and
 `waterbox/tests/run-roms.sh` boots whatever licensed images sit in the
 gitignored `tests/roms/` - nothing licensed ships in this repository.
 
+## Using it in Chimera
+
+Chimera ships no cores and downloads nothing. Download the `.chimeraCore`
+package from this repository's
+[Releases](https://github.com/ToolAssisted-run/chimera-core-dosbox-x/releases)
+page, or build it, and put it in the `Cores` folder beside `Chimera.exe`.
+File > Core Manager lists it. The same file works on Linux and on Windows.
+
 ## Building
+
+[docs/BUILDING.md](docs/BUILDING.md) has the full instructions, as CI runs
+them, and [AGENTS.md](AGENTS.md) is the operating guide for an AI coding
+agent. In short:
 
 Both builds are meson. The native reference:
 
