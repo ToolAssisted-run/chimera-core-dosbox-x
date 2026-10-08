@@ -88,11 +88,11 @@ static WbxInput g_input;
 // button-index blocks, matching gen-config.py's order (BizHawk's)
 static constexpr int BTN_JOY1 = 0;        // up down left right b1 b2
 static constexpr int BTN_JOY2 = 6;
-static constexpr int BTN_MOUSE = 12;      // left middle right (LEVELS)
-static constexpr int BTN_SWAP = 15;       // prevFD nextFD swapFD prevCD nextCD swapCD
-static constexpr int BTN_KEYS = 21;       // 102 keyboard keys (KBD 1..102)
+static constexpr int BTN_MOUSE = 12;      // left middle right, set position (LEVELS)
+static constexpr int BTN_SWAP = 16;       // prevFD nextFD swapFD prevCD nextCD swapCD
+static constexpr int BTN_KEYS = 22;       // 102 keyboard keys (KBD 1..102)
 static constexpr int BTN_KEY_COUNT = 102;
-static constexpr int BTN_COUNT = 123;
+static constexpr int BTN_COUNT = 124;
 static uint8_t g_buttons[BTN_COUNT];      // current levels, set by SetButton
 static uint8_t g_prevButtons[BTN_COUNT];  // last frame's levels (edges)
 
@@ -466,10 +466,12 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 	if (!g_buttons[M] && g_prevButtons[M]) g_input.mouse.middleReleased = 1;
 	if (g_buttons[R] && !g_prevButtons[R]) g_input.mouse.rightPressed = 1;
 	if (!g_buttons[R] && g_prevButtons[R]) g_input.mouse.rightReleased = 1;
+	g_input.mouse.setPosition = g_buttons[BTN_MOUSE + 3];
 	if (g_input.mouse.sensitivity == 0.0f) g_input.mouse.sensitivity = g_mouseSensitivity;
 	} else {
 		g_input.mouse.posX = g_input.mouse.posY = 0;
 		g_input.mouse.speedX = g_input.mouse.speedY = 0;
+		g_input.mouse.setPosition = 0;
 	}
 
 	// disk-swap controls, edge triggered; the pending index is guest state
@@ -520,6 +522,7 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 	in.mouse.leftReleased = g_input.mouse.leftReleased != 0;
 	in.mouse.middleReleased = g_input.mouse.middleReleased != 0;
 	in.mouse.rightReleased = g_input.mouse.rightReleased != 0;
+	in.mouse.setPosition = g_input.mouse.setPosition != 0;
 	in.mouse.sensitivity = g_input.mouse.sensitivity != 0.0f ? g_input.mouse.sensitivity : 1.0f;
 	in.insertFloppyDisk = g_input.insertFloppyDisk;
 	in.insertCDROM = g_input.insertCDROM;

@@ -15,9 +15,12 @@ round-trips around every frame. What the machine has:
 
 - **Full input**: the 100-key keyboard, mouse (absolute + relative, three
   buttons), two game-port joysticks - all through Chimera's wide-input channel
-  (a DOS keyboard does not fit a packed button word).
+  (a DOS keyboard does not fit a packed button word). The mouse's position
+  applies while **Mouse Set Position** is held; let go, the pointer stays
+  where it is and Mouse Speed moves it.
 - **An exact pointer under Windows**: with the `Use Chimera Mouse Driver`
-  setting (on by default), Windows 3.1, 95 and 98 put the pointer where Mouse Position says.
+  setting (on by default), Windows 3.1, 95 and 98 put the pointer where Mouse Position says
+  (with Mouse Set Position held).
   The core carries the drivers ([`guest-tools/`](guest-tools)) on a drive B:
   of its own and installs them into the Windows on C: as it starts.
 - **Storage**: floppy, hard disk and CD images load as plain hash-bound

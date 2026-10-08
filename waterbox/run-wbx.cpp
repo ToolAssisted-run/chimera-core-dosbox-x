@@ -416,6 +416,7 @@ int main(int argc, char **argv)
 			SetAxis(3, ex.spdY);
 			SetButton(EX_BTN_MOUSE + 0, ex.mouseL);
 			SetButton(EX_BTN_MOUSE + 2, ex.mouseR);
+			SetButton(EX_BTN_MOUSE + 3, ex.mouseSet);
 			SetButton(EX_BTN_JOY1 + 0, ex.joyUp);
 			SetButton(EX_BTN_JOY1 + 1, ex.joyDown);
 			SetButton(EX_BTN_JOY1 + 2, ex.joyLeft);

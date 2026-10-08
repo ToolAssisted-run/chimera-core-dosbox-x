@@ -103,14 +103,18 @@ JOY = [(f'P{p} Joystick {b}', bind)
                        ('Right', f'Right, {pad} POV1R, X1 DpadRight, X1 LStickRight' if p == 1 else ''),
                        ('Button 1', 'Z, J1 B1, X1 X' if p == 1 else ''),
                        ('Button 2', 'X, J1 B2, X1 A' if p == 1 else ''))]
+# Mouse Set Position is what makes Mouse Position X/Y apply: held, the pointer
+# is put there and the speeds are ignored; not held, the position is ignored
+# and the pointer stays where it is (user-decided, 2026-10-08; chimera#210,
+# chimera#211). It ships unbound, like the middle and right buttons.
 MOUSE_BTNS = [('Mouse Left Button', 'WMouse L'), ('Mouse Middle Button', ''),
-              ('Mouse Right Button', '')]
+              ('Mouse Right Button', ''), ('Mouse Set Position', '')]
 SWAP = [('Previous Floppy Disk', ''), ('Next Floppy Disk', ''), ('Swap Floppy Disk', ''),
         ('Previous CDROM', ''), ('Next CDROM', ''), ('Swap CDROM', '')]
 
 buttons = [n for n, _ in JOY] + [n for n, _ in MOUSE_BTNS] + [n for n, _ in SWAP] \
     + [name for _, name, _ in KEYS]
-assert len(buttons) == 123, len(buttons)
+assert len(buttons) == 124, len(buttons)
 
 # An absolute position on the guest's screen is 0..65535 with neutral 32768 on
 # every Chimera core (chimera docs/porting-a-core.md, "A point on the screen").
@@ -311,7 +315,8 @@ FIRMWARE = [
 MNEMONICS = {
     "Joystick Up": "U", "Joystick Down": "D", "Joystick Left": "L", "Joystick Right": "R",
     "Joystick Button 1": "1", "Joystick Button 2": "2", "Mouse Left Button": "l",
-    "Mouse Middle Button": "m", "Mouse Right Button": "r", "Previous Floppy Disk": "<",
+    "Mouse Middle Button": "m", "Mouse Right Button": "r", "Mouse Set Position": "@",
+    "Previous Floppy Disk": "<",
     "Next Floppy Disk": ">", "Swap Floppy Disk": "v", "Previous CDROM": "{", "Next CDROM": "}",
     "Swap CDROM": "w", "Key 1": "1", "Key 2": "2", "Key 3": "3", "Key 4": "4", "Key 5": "5",
     "Key 6": "6", "Key 7": "7", "Key 8": "8", "Key 9": "9", "Key 0": "0", "Key Q": "Q",
@@ -395,7 +400,7 @@ config = {
         "buttons": buttons,
         "mnemonics": mnemonics_for(buttons),
         "axes": with_headers(axes),
-        "_axes_note": "Mouse position is an absolute point on the guest screen, 0..65535 across whatever the machine is drawing right now - a DOS box changes video mode whenever it likes, so the wire carries a fraction and the driver converts it against the live mode. Speed is the per-frame relative movement, in guest pixels. The frontend feeds these through SetAxis before every frame."
+        "_axes_note": "Mouse position is an absolute point on the guest screen, 0..65535 across whatever the machine is drawing right now - a DOS box changes video mode whenever it likes, so the wire carries a fraction and the driver converts it against the live mode. It applies only while the Mouse Set Position button is held: then the pointer is put there and the speeds are ignored. While the button is not held the position is ignored, the pointer stays where it is, and Mouse Speed - the per-frame relative movement, in guest pixels - moves it. The frontend feeds these through SetAxis before every frame."
     },
     "extensions": {
         ".ima": "DOS", ".img": "DOS", ".xdf": "DOS", ".fdi": "DOS",
@@ -420,12 +425,12 @@ config = {
         },
         {
             "name": "mouseSensitivity", "display": "Mouse Relative Sensitivity",
-            "description": "Multiplies every relative mouse movement before the machine sees it, in mickeys. It applies to Mouse Speed X/Y and to the movement Mouse Position X/Y implies, so it scales the pointer's whole travel, not its destination: an absolute position still lands where it says, but it takes this many times as many mickeys to get there. Was 3.0, which is the BizHawk integration's value and moved the DOS cursor about three times as far as the host pointer asked for.",
+            "description": "Multiplies every relative mouse movement before the machine sees it, in mickeys. It applies to Mouse Speed X/Y and to the movement a pointer placed with Mouse Set Position implies, so it scales the pointer's whole travel, not its destination: an absolute position still lands where it says, but it takes this many times as many mickeys to get there. Was 3.0, which is the BizHawk integration's value and moved the DOS cursor about three times as far as the host pointer asked for.",
             "type": "float", "default": 0.5, "sync": True
         },
         {
             "name": "chimeraMouseDriver", "display": "Use Chimera Mouse Driver",
-            "description": "Makes Mouse Position place the Windows 3.1, 95 and 98 pointer exactly, instead of nudging it through Windows' own acceleration. Drive B: holds Chimera's mouse drivers and their installer, and before anything else starts the installer puts the right one into the Windows on drive C: (Windows 95/98: CHIMABS.EXE, started from WIN.INI; Windows 3.1: VBADOS' VBMOUSE.DRV). It writes to C: only when the driver is not there yet, and leaves a disk with no Windows alone. Turning this off removes drive B: but not an installed driver. Not on PC-98 machines, which these drivers are not for. B:\\README.TXT says more, and B:\\INSTALL installs by hand.",
+            "description": "Makes Mouse Position (with Mouse Set Position held) place the Windows 3.1, 95 and 98 pointer exactly, instead of nudging it through Windows' own acceleration. Drive B: holds Chimera's mouse drivers and their installer, and before anything else starts the installer puts the right one into the Windows on drive C: (Windows 95/98: CHIMABS.EXE, started from WIN.INI; Windows 3.1: VBADOS' VBMOUSE.DRV). It writes to C: only when the driver is not there yet, and leaves a disk with no Windows alone. Turning this off removes drive B: but not an installed driver. Not on PC-98 machines, which these drivers are not for. B:\\README.TXT says more, and B:\\INSTALL installs by hand.",
             "type": "bool", "default": True, "sync": True
         },
         {

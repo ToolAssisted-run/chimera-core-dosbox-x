@@ -17,20 +17,23 @@
 /* the config's button index blocks (gen-config.py's order) */
 #define EX_BTN_JOY1 0 /* up down left right b1 b2 */
 #define EX_BTN_JOY2 6
-#define EX_BTN_MOUSE 12 /* left middle right */
-#define EX_BTN_SWAP 15  /* prevFD nextFD swapFD prevCD nextCD swapCD */
-#define EX_BTN_KEYS 21  /* KBD_KEYS 1..102 */
+#define EX_BTN_MOUSE 12 /* left middle right, set position */
+#define EX_BTN_SWAP 16  /* prevFD nextFD swapFD prevCD nextCD swapCD */
+#define EX_BTN_KEYS 22  /* KBD_KEYS 1..102 */
 
 typedef struct {
 	int32_t posX, posY, spdX, spdY;
 	uint8_t mouseL, mouseR;
+	uint8_t mouseSet; /* Mouse Set Position: the position applies while it is held */
 	uint8_t joyUp, joyDown, joyLeft, joyRight, joyB1, joyB2;
 } ExLevels;
 
-/* positionOnly: the mouse is driven by Mouse Position alone, both speeds held
- * at zero - which moves it by how far the position moved, as BizHawk does
- * (issue #61). Before that was ported this pattern moved nothing, and the
- * gate's differential against a quiet run is what says so.
+/* positionOnly: the mouse is driven by Mouse Position alone - Mouse Set
+ * Position held throughout, both speeds at zero - which moves it by how far
+ * the position moved (issue #61). Before that was ported this pattern moved
+ * nothing, and the gate's differential against a quiet run is what says so.
+ * In the general pattern the button is held for 64 frames and let go for 64,
+ * so both rules run: the position while it is held, the speeds while not.
  *
  * The position plane is 0..65535 across the guest's screen, whatever mode it
  * is in - the one convention every core uses for an absolute point. It used to
@@ -41,7 +44,7 @@ static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 {
 	ExLevels e;
 	e.posX = 32768; e.posY = 32768; e.spdX = 0; e.spdY = 0; /* the declared neutral: the middle of the screen */
-	e.mouseL = 0; e.mouseR = 0;
+	e.mouseL = 0; e.mouseR = 0; e.mouseSet = 0;
 	e.joyUp = 0; e.joyDown = 0; e.joyLeft = 0; e.joyRight = 0;
 	e.joyB1 = 0; e.joyB2 = 0;
 	if (frame < EX_START_FRAME) return e;
@@ -54,6 +57,7 @@ static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 	e.posY = (int32_t)((x >> 24) % 65536);
 	e.mouseL = (uint8_t)((frame >> 4) & 1);
 	e.mouseR = (uint8_t)((frame >> 5) & 1);
+	e.mouseSet = (uint8_t)((frame >> 6) & 1);
 	e.joyUp = (uint8_t)((frame >> 2) & 1);
 	e.joyLeft = (uint8_t)((frame >> 3) & 1);
 	e.joyB1 = (uint8_t)((frame >> 3) & 1);
@@ -69,6 +73,7 @@ static inline ExLevels exercise_levels_mode(long frame, int positionOnly)
 		e.joyB1 = 0; e.joyB2 = 0;
 		e.spdX = 0;
 		e.spdY = 0;
+		e.mouseSet = 1;
 		e.posX = (int32_t)((step >> 16) % 65536);
 		e.posY = (int32_t)((step >> 32) % 65536);
 	}

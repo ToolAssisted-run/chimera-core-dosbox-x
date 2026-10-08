@@ -134,6 +134,10 @@ struct DosDrvMouse {
 	int32_t speedX = 0, speedY = 0;  // relative movement this frame
 	bool leftPressed = false, middlePressed = false, rightPressed = false;
 	bool leftReleased = false, middleReleased = false, rightReleased = false;
+	// Mouse Set Position, a level: while it is held the pointer is put at
+	// posX/posY and the speeds are ignored; while it is not, the position is
+	// ignored - the pointer stays where it is, and only a speed moves it.
+	bool setPosition = false;
 	float sensitivity = 3.0f; // BizHawk's Mouse Relative Sensitivity default
 };
 

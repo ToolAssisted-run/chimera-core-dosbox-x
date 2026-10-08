@@ -793,59 +793,71 @@ void dosdrv_frame(const DosDrvInput &f)
 	const int32_t posPxX = screenW > 0 ? (int32_t)(((int64_t)f.mouse.posX * screenW) / MOUSE_ABS_STEPS) : 0;
 	const int32_t posPxY = screenH > 0 ? (int32_t)(((int64_t)f.mouse.posY * screenH) / MOUSE_ABS_STEPS) : 0;
 
-	// A speed of zero means "move by how far the position moved" - BizHawk's
-	// frontend does exactly this before its driver sees the frame (DOSBox.cs:
-	// DeltaX = SpeedX != 0 ? SpeedX : PosX - lastPosX, the last position kept
-	// in its savestate). It was never ported, so Mouse Position X/Y did nothing
-	// on its own (issue #61). It lives here rather than in the guest adapter so
-	// that the native reference and the sandbox share it, and the last position
-	// is ordinary guest memory, so a savestate carries it as BizHawk's does.
-	// Like BizHawk, it is kept whether or not either speed was given.
+	// WHEN THE POSITION APPLIES: while Mouse Set Position is held, and only then
+	// (user-decided, 2026-10-08; chimera#210, chimera#211).
 	//
-	// The difference is taken in PIXELS, not in wire units. A wire unit is
-	// 1/65536 of the screen - about a hundredth of a pixel at 640 wide - so
-	// differencing the wire would hand the mickey path numbers about a hundred
-	// times too large, and a one-pixel nudge would fly across the screen.
+	// It used to be per axis and implicit: an axis whose Mouse Speed was zero
+	// was driven by its position, every frame. Two things were wrong with that.
+	// A position axis nobody touches rests at the middle of the screen, so the
+	// frame after a movie stopped pointing somewhere the pointer was sent back
+	// to the middle - an untouched cell was a command (#210). And a hand on a
+	// real mouse moves both at once, so while it moved the speed was never
+	// zero, the position was ignored, and the pointer was thrown about by the
+	// relative path until the hand stopped (#211).
 	//
-	// But both pixels are this frame's: what is remembered is the last WIRE
-	// position, resolved again against the range INT 33h has NOW. The range
-	// moves with the video mode, and remembering last frame's pixel instead
-	// differenced a pixel of the old range against one of the new - so a mode
-	// change under a position nobody moved was sent as motion. Windows 98 boots
-	// through 512x200 into 640x400, and an X-only nudge reached its relative
-	// driver with a 100-pixel Y move on the side (chimera#176). An axis that did
-	// not change now moves nothing, whatever the mode does.
+	// Now the button says it. Held: the pointer is put at Mouse Position X/Y,
+	// both axes, and the speeds are ignored. Not held: the position is ignored
+	// - the pointer stays where it is - and a speed moves it, as a mouse does.
 	//
-	// -1 is "no previous position", so the very first frame always asserts.
-	// Without it a movie that holds the position at exactly the starting value
-	// - zero, the left edge - produces no delta on any frame and never places
-	// the cursor at all.
-	static int32_t lastPosX = -1, lastPosY = -1;
-	const int32_t lastPxX = screenW > 0 && lastPosX >= 0 ? (int32_t)(((int64_t)lastPosX * screenW) / MOUSE_ABS_STEPS) : 0;
-	const int32_t lastPxY = screenH > 0 && lastPosY >= 0 ? (int32_t)(((int64_t)lastPosY * screenH) / MOUSE_ABS_STEPS) : 0;
-	const bool posDroveX = f.mouse.speedX == 0, posDroveY = f.mouse.speedY == 0;
-	const int32_t mouseSpeedX = !posDroveX ? f.mouse.speedX : (lastPosX < 0 ? 0 : posPxX - lastPxX);
-	const int32_t mouseSpeedY = !posDroveY ? f.mouse.speedY : (lastPosY < 0 ? 0 : posPxY - lastPxY);
-	lastPosX = f.mouse.posX;
-	lastPosY = f.mouse.posY;
+	// WHERE THE POINTER IS is kept as the position is given: a fraction of the
+	// screen, 0..65535. Placing it sets that; a speed, which is in guest
+	// pixels, moves it by that many pixels of the screen as it is now. A guest
+	// that is only told how far (the PS/2 packet, INT 33h's mickeys) gets the
+	// difference between where the pointer was and where it is put - taken in
+	// PIXELS, both resolved against the range INT 33h has NOW. A wire unit is
+	// about a hundredth of a pixel at 640 wide, so differencing the wire would
+	// send motion a hundred times too large; and the range moves with the
+	// video mode, so remembering last frame's pixel differenced a pixel of the
+	// old range against one of the new, and a mode change under a position
+	// nobody moved was sent as motion (Windows 98 boots through 512x200 into
+	// 640x400: chimera#176). A pointer that is not moved moves nothing,
+	// whatever the mode does.
+	//
+	// It starts in the middle, which is where a machine puts its own pointer.
+	// All of this is ordinary guest memory, so a savestate carries it.
+	static int32_t atX = MOUSE_ABS_STEPS / 2, atY = MOUSE_ABS_STEPS / 2;
+	const bool placed = f.mouse.setPosition;
+	const int32_t atPxX = screenW > 0 ? (int32_t)(((int64_t)atX * screenW) / MOUSE_ABS_STEPS) : 0;
+	const int32_t atPxY = screenH > 0 ? (int32_t)(((int64_t)atY * screenH) / MOUSE_ABS_STEPS) : 0;
+	const int32_t mouseSpeedX = placed ? posPxX - atPxX : f.mouse.speedX;
+	const int32_t mouseSpeedY = placed ? posPxY - atPxY : f.mouse.speedY;
+	if (placed) {
+		atX = f.mouse.posX;
+		atY = f.mouse.posY;
+	} else {
+		atX += screenW > 0 ? (int32_t)(((int64_t)mouseSpeedX * MOUSE_ABS_STEPS) / screenW) : 0;
+		atY += screenH > 0 ? (int32_t)(((int64_t)mouseSpeedY * MOUSE_ABS_STEPS) / screenH) : 0;
+	}
+	atX = std::min(std::max(atX, 0), (int32_t)MOUSE_ABS_MAX);
+	atY = std::min(std::max(atY, 0), (int32_t)MOUSE_ABS_MAX);
 
-	// AN ABSOLUTE POSITION IS ASSERTED EVERY FRAME, not only when it changes.
-	// A fraction of the screen is not a fixed pixel: the same 32768 is pixel
-	// 160 in a 320-wide mode and pixel 320 in a 640-wide one, so the pixel has
-	// to be recomputed and rewritten whenever the machine redraws - and
-	// Mouse_AfterNewVideoMode resets the cursor to the middle of the new range
-	// on every mode set, which a position that only wrote itself on a change
-	// would never recover from. Holding a position and watching the DOS cursor
-	// walk off it at the next mode change is what this replaced.
+	// A PLACED POINTER IS ASSERTED EVERY FRAME IT IS HELD, not only when it
+	// changes. A fraction of the screen is not a fixed pixel: the same 32768 is
+	// pixel 160 in a 320-wide mode and pixel 320 in a 640-wide one, so the
+	// pixel has to be recomputed and rewritten whenever the machine redraws -
+	// and Mouse_AfterNewVideoMode resets the cursor to the middle of the new
+	// range on every mode set, which a position that only wrote itself on a
+	// change would never recover from.
 	//
-	// An axis driven by an explicit Mouse Speed is NOT asserted: it is moved by
-	// that speed instead, so a movie that steers relatively is not dragged back
-	// to wherever the untouched position axis is resting - which, now that the
-	// neutral is the middle of the screen, would otherwise pin it there.
-	if (posDroveX) mouse.x = (double)(mouse.min_x + posPxX);
-	else mouse.x += (double)mouseSpeedX;
-	if (posDroveY) mouse.y = (double)(mouse.min_y + posPxY);
-	else mouse.y += (double)mouseSpeedY;
+	// A pointer that is not being placed is moved by the speed and nothing
+	// else: with no speed it is left exactly where it is.
+	if (placed) {
+		mouse.x = (double)(mouse.min_x + posPxX);
+		mouse.y = (double)(mouse.min_y + posPxY);
+	} else {
+		mouse.x += (double)mouseSpeedX;
+		mouse.y += (double)mouseSpeedY;
+	}
 	if (mouse.x < (double)mouse.min_x) mouse.x = (double)mouse.min_x;
 	else if (mouse.x > (double)mouse.max_x) mouse.x = (double)mouse.max_x;
 	if (mouse.y < (double)mouse.min_y) mouse.y = (double)mouse.min_y;
@@ -856,13 +868,14 @@ void dosdrv_frame(const DosDrvInput &f)
 	// would be applied twice: under Windows 9x, chimabs places the cursor while
 	// Windows' own PS/2 driver would still accelerate the same move into it. So
 	// the PS/2 event still fires - VBMOUSE.EXE reads the VMware port when it
-	// does, and the buttons travel on it - but it carries no motion for an axis
-	// the position drove. VBMOUSE ignores packet motion altogether in absolute
-	// mode and takes a speed through the VMware position (below); chimabs only
-	// follows Mouse Position, so for it a speed stays relative motion.
+	// does, and the buttons travel on it - but it carries no motion while the
+	// pointer is being placed. VBMOUSE ignores packet motion altogether in
+	// absolute mode and takes a speed through the VMware position (below);
+	// chimabs only follows a placed pointer, so for it a speed stays relative
+	// motion.
 	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
-		const bool absX = vmware_mouse || (pointerClient && posDroveX);
-		const bool absY = vmware_mouse || (pointerClient && posDroveY);
+		const bool absX = vmware_mouse || (pointerClient && placed);
+		const bool absY = absX;
 		float adjustedDeltaX = (float)mouseSpeedX * (absX ? 0.0f : f.mouse.sensitivity);
 		float adjustedDeltaY = (float)mouseSpeedY * (absY ? 0.0f : f.mouse.sensitivity);
 
@@ -908,36 +921,25 @@ void dosdrv_frame(const DosDrvInput &f)
 	// the other path resolves against - and which means nothing to the guests
 	// this one exists for, since a Windows mouse driver never calls INT 33h.
 	//
-	// An explicit Mouse Speed still moves a guest in absolute mode: a speed is
-	// in guest pixels, so it converts UP to wire units against the live screen,
-	// the mirror of the conversion above.
+	// A Mouse Speed still moves a guest in absolute mode: where the pointer is
+	// (above) has already taken it, converted up to wire units against the
+	// live screen.
 	//
 	// The plane is restated every frame rather than once at boot because
 	// render.cpp says it too, from the SDL window's geometry, every time the
 	// video mode changes - and headless there is no window for those numbers to
 	// mean anything. Said once at boot, the first mode change silently replaced
 	// it and every position after that was scaled against the wrong width.
-	static int32_t vmAbsX = 0, vmAbsY = 0;
 	if (mouseSpeedX != 0 || mouseSpeedY != 0) {
-		vmAbsX = posDroveX ? f.mouse.posX
-			: vmAbsX + (screenW > 0 ? (int32_t)(((int64_t)mouseSpeedX * MOUSE_ABS_STEPS) / screenW) : 0);
-		vmAbsY = posDroveY ? f.mouse.posY
-			: vmAbsY + (screenH > 0 ? (int32_t)(((int64_t)mouseSpeedY * MOUSE_ABS_STEPS) / screenH) : 0);
-		vmAbsX = std::min(std::max(vmAbsX, 0), (int32_t)MOUSE_ABS_MAX);
-		vmAbsY = std::min(std::max(vmAbsY, 0), (int32_t)MOUSE_ABS_MAX);
 		VMWARE_ScreenParams(0, 0, MOUSE_ABS_MAX, MOUSE_ABS_MAX, false);
-		VMWARE_MousePosition((uint16_t)vmAbsX, (uint16_t)vmAbsY);
+		VMWARE_MousePosition((uint16_t)atX, (uint16_t)atY);
 	}
 
-	// The Chimera port says where Mouse Position IS, every frame - held or
-	// moved, from the very first frame - and follows nothing else: a speed
-	// stays relative motion for its reader.
-	{
-		const uint32_t px = (uint32_t)std::min(std::max(f.mouse.posX, 0), (int32_t)MOUSE_ABS_MAX);
-		const uint32_t py = (uint32_t)std::min(std::max(f.mouse.posY, 0), (int32_t)MOUSE_ABS_MAX);
-		if (posDroveX) g_pointerWire = (g_pointerWire & 0x0000FFFFu) | (px << 16);
-		if (posDroveY) g_pointerWire = (g_pointerWire & 0xFFFF0000u) | py;
-	}
+	// The Chimera port says where the pointer was last PLACED, every frame it
+	// is held, and follows nothing else: let go, it keeps saying the same
+	// place - so its reader leaves the pointer there (chimera#210) - and a
+	// speed stays relative motion for that reader.
+	if (placed) g_pointerWire = ((uint32_t)atX << 16) | (uint32_t)atY;
 
 	// Buttons go to both interfaces; the numbering is the same on each
 	// (0 left, 1 right, 2 middle), and a guest in absolute mode reads its

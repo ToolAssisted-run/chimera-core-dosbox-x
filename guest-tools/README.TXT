@@ -5,7 +5,9 @@ This is drive B: of a Chimera DOSBox-X machine with Use Chimera Mouse
 Driver on.
 
 Mouse Position X/Y is a point on the screen: 0..65535 across and
-0..65535 down, whatever the resolution. Windows keeps its own pointer,
+0..65535 down, whatever the resolution. It applies while the Mouse Set
+Position button is held: then the pointer is put there. Let go, the
+pointer stays where it was put. Windows keeps its own pointer,
 and left to itself it only hears relative motion, which it accelerates,
 so the pointer lands near the target instead of on it. The drivers here
 tell Windows where the pointer IS.
@@ -55,9 +57,10 @@ when it changes.
 
 WHAT STAYS RELATIVE
 
-Mouse Speed X/Y is still relative motion. It is what games that read the
-mouse themselves (DirectInput, mouselook) see, and it does not move the
-position these drivers read. The buttons are unchanged.
+Mouse Speed X/Y is still relative motion, while Mouse Set Position is
+not held (held, the position wins and the speed is ignored). It is what
+games that read the mouse themselves (DirectInput, mouselook) see, and it
+does not move the position these drivers read. The buttons are unchanged.
 
 
 FILES

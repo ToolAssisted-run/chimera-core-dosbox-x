@@ -140,6 +140,7 @@ int main(int argc, char **argv)
 	bool printDrive = false; // --print-drive: the current DOS drive when the run ends
 	long dumpFrom = 0; // --dump-from N: --dump-video writes only frames >= N
 	long nudgeFrame = -1, nudgeBy = 0;  // --mouse-nudge FRAME:WIRE
+	long releaseFrame = -1, releasePosX = -1, releasePosY = -1; // --mouse-release FRAME[:X:Y]
 	long speedFrame = -1, speedBy = 0;  // --mouse-speed FRAME:PIXELS
 	int frames = 600;
 	bool gate = false, verbose = false, exercise = false, exercisePosition = false;
@@ -202,6 +203,16 @@ int main(int argc, char **argv)
 			holdPosX = strtol(spec, 0, 0);
 			const char *colon = strchr(spec, ':');
 			holdPosY = colon != nullptr ? strtol(colon + 1, 0, 0) : holdPosX;
+		}
+		else if (!strcmp(argv[i], "--mouse-release") && i + 1 < argc) {
+			// from this frame Mouse Set Position is let go, and the position
+			// axes go to X:Y (the pointer must not follow them there)
+			char *end = nullptr;
+			releaseFrame = strtol(argv[++i], &end, 0);
+			if (end && *end == ':') {
+				releasePosX = strtol(end + 1, &end, 0);
+				releasePosY = end && *end == ':' ? strtol(end + 1, nullptr, 0) : releasePosX;
+			}
 		}
 		else if (!strcmp(argv[i], "--mouse-nudge") && i + 1 < argc) {
 			// FRAME:WIRE - from FRAME on, the held position moves by WIRE units
@@ -361,6 +372,7 @@ int main(int argc, char **argv)
 			in.mouse.leftReleased = !ex.mouseL && prevEx.mouseL;
 			in.mouse.rightPressed = ex.mouseR && !prevEx.mouseR;
 			in.mouse.rightReleased = !ex.mouseR && prevEx.mouseR;
+			in.mouse.setPosition = ex.mouseSet != 0;
 			in.joy1.up = ex.joyUp != 0;
 			in.joy1.down = ex.joyDown != 0;
 			in.joy1.left = ex.joyLeft != 0;
@@ -369,7 +381,18 @@ int main(int argc, char **argv)
 			in.joy1.button2 = ex.joyB2 != 0;
 			prevEx = ex;
 		}
-		if (holdPosX >= 0) { in.mouse.posX = (int32_t)holdPosX; in.mouse.posY = (int32_t)holdPosY; }
+		if (holdPosX >= 0) {
+			// --mouse-pos: the position, with Mouse Set Position held - unless
+			// --mouse-release says from which frame it is let go
+			in.mouse.posX = (int32_t)holdPosX;
+			in.mouse.posY = (int32_t)holdPosY;
+			in.mouse.setPosition = releaseFrame < 0 || i < releaseFrame;
+			if (releaseFrame >= 0 && i >= releaseFrame && releasePosX >= 0) {
+				// ...and the axes go somewhere else, as untouched cells do
+				in.mouse.posX = (int32_t)releasePosX;
+				in.mouse.posY = (int32_t)releasePosY;
+			}
+		}
 		if (nudgeFrame >= 0 && i >= nudgeFrame) in.mouse.posX += (int32_t)nudgeBy;
 		if (speedFrame >= 0 && i == speedFrame) in.mouse.speedX = (int32_t)speedBy;
 		dosdrv_frame(in);

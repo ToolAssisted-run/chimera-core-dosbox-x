@@ -591,6 +591,34 @@ else
 	echo "PASS input:mouse-absolute (the cursor lands where the axis says, and the same axis follows a mode change: $abs80 at 640 wide, $abs40 at 320)"
 fi
 
+# THE POSITION APPLIES WHILE Mouse Set Position IS HELD, AND ONLY THEN
+# (chimera#210, chimera#211; user-decided 2026-10-08). The four things that
+# follow from it, each read back as a number from the DOS cursor at the end of
+# the run (80-column text, 640x200, as above). The button is held across the
+# test program's start, because the program resets the mouse when it starts:
+#   held, then let go with the axes back at rest - an untouched cell - the
+#     pointer stays where it was put (it used to go back to the middle);
+#   never held, the axes at the far corner: the pointer never goes there;
+#   held, and a speed given too: the position wins (a hand moving a real
+#     mouse gives both, and the speed used to win);
+#   let go, then a speed: the pointer moves from where it was put.
+mouseset() { # run-native options -> "x y"
+	rm -rf "$work/ms"; mkdir -p "$work/ms"
+	timeout 900 "$rn" --workdir "$work/ms" --rom "$work/input.iso" --frames 400 "$@" --type 'd:\postest.com
+' --ram-slice 0x4F0 4 "$work/ms.bin" >/dev/null 2>&1
+	python3 -c "
+import sys
+b = open(sys.argv[1], 'rb').read()
+print(b[0] | (b[1] << 8), b[2] | (b[3] << 8))" "$work/ms.bin"
+}
+msGot="$(mouseset --mouse-pos 65535 --mouse-release 280:32768:32768)|$(mouseset --mouse-pos 65535 --mouse-release 0)|$(mouseset --mouse-pos 0 --mouse-speed 320:40)|$(mouseset --mouse-pos 0 --mouse-release 280:32768:32768 --mouse-speed 320:40)"
+msWant="632 192|320 96|0 0|40 0"
+if [ "$msGot" != "$msWant" ]; then
+	echo "FAIL input:mouse-set-position (stays|never goes|position wins|speed moves it: wanted $msWant, got $msGot)"; fail=1
+else
+	echo "PASS input:mouse-set-position (let go, the pointer stays put; not held, the position is ignored; held, it beats a speed; let go, a speed moves it: $msGot)"
+fi
+
 # THE TWO PATHS MEASURE IN THE SAME UNITS. A position moved ten pixels and a
 # Mouse Speed of ten pixels are the same movement, so the machine must be told
 # the same thing - which is only true if the position path differences its
@@ -610,9 +638,10 @@ print(v - 65536 if v > 32767 else v)" "$work/mk.bin"
 }
 mkStill="$(mickeys)"
 mkPos="$(mickeys --mouse-nudge 300:1024)"   # 1024 wire = 10 px at 640 wide
-mkSpd="$(mickeys --mouse-speed 300:10)"
+# a speed applies only with Mouse Set Position let go: released ten frames before
+mkSpd="$(mickeys --mouse-release 290 --mouse-speed 300:10)"
 mkNeg="$(mickeys --mouse-nudge 300:-1024)"
-mkNegSpd="$(mickeys --mouse-speed 300:-10)"
+mkNegSpd="$(mickeys --mouse-release 290 --mouse-speed 300:-10)"
 if [ "$mkStill" != "0" ]; then
 	echo "FAIL input:mouse-units (a held position invented $mkStill mickeys of movement)"; fail=1
 elif [ "$mkPos" != "$mkSpd" ] || [ "$mkNeg" != "$mkNegSpd" ]; then

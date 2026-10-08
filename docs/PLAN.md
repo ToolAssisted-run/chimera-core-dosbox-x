@@ -160,6 +160,26 @@ does. An axis driven by an explicit `Mouse Speed` is exempt and moves
 relatively, so a movie that steers with speed alone is not dragged back to
 the neutral - which is now the middle of the screen.
 
+**The position applies while Mouse Set Position is held (user-decided,
+2026-10-08; chimera#210, chimera#211).** The paragraph above was the rule
+until then - an axis whose speed was zero was driven by its position, every
+frame - and two reports showed what was wrong with it. A position axis nobody
+touches rests at the middle of the screen, so the frame after a movie stopped
+pointing somewhere, the pointer went back to the middle: an untouched cell
+was a command (#210). And a hand on a real mouse gives a position and a speed
+at once, so while it moved the speed won and the pointer was thrown about by
+the relative path until the hand stopped (#211). The user's rule: a new
+button, **Mouse Set Position**. Held, the pointer is put at Mouse Position
+X/Y - both axes, asserted every frame as above - and the speeds are ignored.
+Not held, the position is ignored, the pointer stays where it is, and a
+speed moves it. The driver keeps where the pointer is as a fraction of the
+screen (placing sets it, a speed moves it), so a guest that is only told how
+far gets the difference from where the pointer really was; the Chimera port
+keeps saying the last place it was put. The button ships unbound, and a
+movie made before it needs the button held wherever it pointed. Gate leg
+`input:mouse-set-position` reads the four cases back from the DOS cursor;
+the old rule fails three of them.
+
 `Mouse Speed X/Y` stays relative and stays in PIXELS, which forces the
 position path to difference its pixels rather than its wire: one wire unit
 is about a hundredth of a pixel at 640 wide, so differencing the wire would

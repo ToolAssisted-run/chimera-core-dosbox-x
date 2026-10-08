@@ -25,7 +25,8 @@ typedef struct {
 	int32_t speedX, speedY;
 	uint8_t leftPressed, middlePressed, rightPressed;
 	uint8_t leftReleased, middleReleased, rightReleased;
-	uint8_t pad[2];
+	uint8_t setPosition; /* a level: the position applies while it is held */
+	uint8_t pad[1];
 	float sensitivity;
 } WbxMouse;
 
