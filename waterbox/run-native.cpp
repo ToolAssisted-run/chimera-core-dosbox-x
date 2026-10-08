@@ -141,6 +141,7 @@ int main(int argc, char **argv)
 	long dumpFrom = 0; // --dump-from N: --dump-video writes only frames >= N
 	long nudgeFrame = -1, nudgeBy = 0;  // --mouse-nudge FRAME:WIRE
 	long releaseFrame = -1, releasePosX = -1, releasePosY = -1; // --mouse-release FRAME[:X:Y]
+	long repressFrame = -1;                                     // --mouse-repress FRAME
 	long speedFrame = -1, speedBy = 0;  // --mouse-speed FRAME:PIXELS
 	int frames = 600;
 	bool gate = false, verbose = false, exercise = false, exercisePosition = false;
@@ -213,6 +214,10 @@ int main(int argc, char **argv)
 				releasePosX = strtol(end + 1, &end, 0);
 				releasePosY = end && *end == ':' ? strtol(end + 1, nullptr, 0) : releasePosX;
 			}
+		}
+		else if (!strcmp(argv[i], "--mouse-repress") && i + 1 < argc) {
+			// ...and from this frame it is held again, on the --mouse-pos spot
+			repressFrame = strtol(argv[++i], nullptr, 0);
 		}
 		else if (!strcmp(argv[i], "--mouse-nudge") && i + 1 < argc) {
 			// FRAME:WIRE - from FRAME on, the held position moves by WIRE units
@@ -386,8 +391,9 @@ int main(int argc, char **argv)
 			// --mouse-release says from which frame it is let go
 			in.mouse.posX = (int32_t)holdPosX;
 			in.mouse.posY = (int32_t)holdPosY;
-			in.mouse.setPosition = releaseFrame < 0 || i < releaseFrame;
-			if (releaseFrame >= 0 && i >= releaseFrame && releasePosX >= 0) {
+			const bool again = repressFrame >= 0 && i >= repressFrame;
+			in.mouse.setPosition = releaseFrame < 0 || i < releaseFrame || again;
+			if (releaseFrame >= 0 && i >= releaseFrame && releasePosX >= 0 && !again) {
 				// ...and the axes go somewhere else, as untouched cells do
 				in.mouse.posX = (int32_t)releasePosX;
 				in.mouse.posY = (int32_t)releasePosY;

@@ -939,7 +939,22 @@ void dosdrv_frame(const DosDrvInput &f)
 	// is held, and follows nothing else: let go, it keeps saying the same
 	// place - so its reader leaves the pointer there (chimera#210) - and a
 	// speed stays relative motion for that reader.
-	if (placed) g_pointerWire = ((uint32_t)atX << 16) | (uint32_t)atY;
+	//
+	// Its reader acts only when what it reads CHANGES (chimabs keeps the last
+	// value it saw), and it cannot know that Windows' own pointer was moved
+	// since by a speed. So a pointer placed again on the very spot it was
+	// placed before would not be put back there. The lowest bit of X - a
+	// sixty-five-thousandth of the screen's width, far below a pixel - is
+	// therefore not position but a mark: it turns over each time the pointer
+	// is placed after a speed has moved it, and the value read is new.
+	static bool movedSincePlaced = false;
+	static uint32_t placeMark = 0;
+	if (!placed && (mouseSpeedX != 0 || mouseSpeedY != 0)) movedSincePlaced = true;
+	if (placed) {
+		if (movedSincePlaced) placeMark ^= 1u;
+		movedSincePlaced = false;
+		g_pointerWire = ((((uint32_t)atX & ~1u) | placeMark) << 16) | (uint32_t)atY;
+	}
 
 	// Buttons go to both interfaces; the numbering is the same on each
 	// (0 left, 1 right, 2 middle), and a guest in absolute mode reads its

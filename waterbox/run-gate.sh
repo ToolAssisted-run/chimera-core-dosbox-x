@@ -695,8 +695,18 @@ ptMoved="$(portWords --mouse-pos 49152:16384 --mouse-nudge 300:256 --type 'd:\po
 ')"
 ptMick="$(portWords --mouse-pos 32768 --mouse-nudge 300:1024 --type 'd:\portmick.com
 ')"
+# The port's reader acts only when what it reads changes, so a pointer placed
+# again on the spot it was placed before - after a speed moved it away - must
+# read differently: the lowest bit of X is a mark that turns over then, and
+# only then (let go and held again with no speed between, it reads the same).
+ptAgain="$(portWords --mouse-pos 49152:16384 --mouse-release 280 --mouse-speed 300:25 --mouse-repress 330 --type 'd:\porttest.com
+')"
+ptSame="$(portWords --mouse-pos 49152:16384 --mouse-release 280 --mouse-repress 330 --type 'd:\porttest.com
+')"
 if [ "$ptHeld" != "5043 4000 c000 0000" ] || [ "$ptMoved" != "5043 4000 c100 0000" ]; then
 	echo "FAIL input:pointer-port (held: $ptHeld, moved: $ptMoved; want 5043 4000 c000 / c100)"; fail=1
+elif [ "$ptAgain" != "5043 4000 c001 0000" ] || [ "$ptSame" != "5043 4000 c000 0000" ]; then
+	echo "FAIL input:pointer-port (placed again after a speed: $ptAgain, want ...c001; with none: $ptSame, want ...c000)"; fail=1
 elif [ "$ptMick" != "0000 0000 0000 0000" ]; then
 	echo "FAIL input:pointer-port (a reader of the port still got relative motion: $ptMick)"; fail=1
 else

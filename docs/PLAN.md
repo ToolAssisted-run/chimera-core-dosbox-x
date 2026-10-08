@@ -180,6 +180,14 @@ movie made before it needs the button held wherever it pointed. Gate leg
 `input:mouse-set-position` reads the four cases back from the DOS cursor;
 the old rule fails three of them.
 
+One thing more for the Chimera port's reader. It acts only when the value
+it reads changes, and it cannot know that a speed has moved Windows' pointer
+since - so a pointer placed again on the spot it was placed before would not
+go back there. The lowest bit of the X it reads is therefore a mark, not
+position (it is a sixty-five-thousandth of the screen): it turns over each
+time the pointer is placed after a speed moved it. Leg `input:pointer-port`
+holds both halves.
+
 `Mouse Speed X/Y` stays relative and stays in PIXELS, which forces the
 position path to difference its pixels rather than its wire: one wire unit
 is about a hundredth of a pixel at 640 wide, so differencing the wire would
