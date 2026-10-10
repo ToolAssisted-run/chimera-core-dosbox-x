@@ -1,5 +1,5 @@
 {
-  "_comment": "The core-declared file form for chimera's project wizard: categories, cardinality (max -1 = unbounded), accepted formats, tooltip help. Chimera renders and enforces; this file decides. Slot ids are what project manifests record.",
+  "_comment": "This file lists the kinds of file a project of this core can hold. Chimera's New Project window is built from it. Each kind is called a slot. A slot has a title, the number of files it takes (min and max, where a max of -1 means no limit), the file extensions it accepts and the help text shown to the user. Chimera shows the form and checks the chosen files against it. A project file records its files under the slot ids used here.",
   "slots": [
     {
       "id": "floppy",
@@ -7,7 +7,7 @@
       "min": 0,
       "max": -1,
       "formats": ["img", "ima", "xdf", "fdi", "hdm", "nfd", "d88", "dcp"],
-      "help": "Floppy disk images (.img, .ima, .xdf, .fdi, .hdm, .nfd, .d88, and PC-98 .dcp dumps). The first one is in drive A: at boot; the order here is the swap order used by the Previous/Next/Swap Floppy Disk inputs."
+      "help": "Floppy disk images (.img, .ima, .xdf, .fdi, .hdm, .nfd, .d88 and PC-98 .dcp dumps). The first one is in drive A: when the machine starts. The order here is the order the Previous, Next and Swap Floppy Disk inputs go through."
     },
     {
       "id": "cdrom",
@@ -15,7 +15,7 @@
       "min": 0,
       "max": -1,
       "formats": ["iso", "cue"],
-      "help": "CD-ROM images: a plain .iso, or a .cue sheet whose referenced track files join the project automatically. The first one is in drive D: at boot; the order here is the swap order used by the Previous/Next/Swap CDROM inputs."
+      "help": "CD-ROM images. Each is a plain .iso file, or a .cue file whose track files join the project automatically. The first one is in drive D: when the machine starts. The order here is the order the Previous, Next and Swap CDROM inputs go through."
     },
     {
       "id": "hdd",
@@ -23,7 +23,7 @@
       "min": 0,
       "max": 1,
       "formats": ["hdd", "img", "hdi"],
-      "help": "A raw hard disk image, or a PC-98 .hdi (its header carries the disk's geometry), mounted writable as drive C:. Writes persist for the session and can be exported as save data, and a previously exported image can be provided here to continue from it. Without one, the formattedHardDisk setting can create an empty disk instead."
+      "help": "A raw hard disk image, or a PC-98 .hdi image (whose header gives the disk's layout). It becomes drive C: and can be written to. What is written stays for the session and can be exported as save data, and an exported image can be given here to continue from it. With no image, the Mount Formatted Hard Disk Drive setting can provide an empty disk."
     },
     {
       "id": "conf",
@@ -31,7 +31,7 @@
       "min": 0,
       "max": 1,
       "formats": ["conf"],
-      "help": "Extra DOSBox-X configuration, appended after everything the sync settings compose (including [autoexec] lines). Use it for per-game tuning the settings do not cover."
+      "help": "Extra DOSBox-X configuration. It is added after everything the settings produce, including [autoexec] lines. Use it for adjustments to a particular game that the settings do not cover."
     }
   ],
   "atLeastOneOf": [["floppy", "cdrom", "hdd", "conf"]]

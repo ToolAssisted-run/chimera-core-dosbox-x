@@ -181,43 +181,58 @@ def machine(id, label, description, **values):
 
 PRESETS = [
     machine("1981_ibm_xt5150", "1981 IBM XT 5150",
-            "An 8086 at 4.77 MHz, 256 KB of RAM, a monochrome MDA card and nothing but the PC speaker.",
+            "An 8086 processor at 4.77 MHz, 256 KB of memory, a monochrome "
+            "MDA video card and only the PC speaker for sound.",
             cpuType="8086", cpuCycles=315, soundBlasterModel="none",
             videoCardType="mda", memsizeMB=0, memsizeKB=256),
     machine("1983_ibm_xt5160", "1983 IBM XT 5160",
-            "An 8086 at 4.77 MHz, the full 640 KB of RAM, CGA, PC speaker only.",
+            "An 8086 processor at 4.77 MHz, the full 640 KB of memory, a CGA"
+            " video card and only the PC speaker.",
             cpuType="8086", cpuCycles=315, soundBlasterModel="none",
             videoCardType="cga", memsizeMB=0, memsizeKB=640),
     machine("1986_ibm_xt5162", "1986 IBM XT 286 5162",
-            "An 80286-class XT at 6 MHz, 1 MB of RAM, EGA, PC speaker only.",
+            "A 286-class XT at 6 MHz, 1 MB of memory, an EGA video card and "
+            "only the PC speaker.",
             cpuType="8086", cpuCycles=700, soundBlasterModel="none",
             videoCardType="ega", memsizeMB=1, memsizeKB=0),
     machine("1987_ibm_ps2_25", "1987 IBM PS/2 25",
-            "An 80186 at 8 MHz, 640 KB of RAM, MCGA, and a Creative Game Blaster.",
+            "An 80186 processor at 8 MHz, 640 KB of memory, MCGA video and a"
+            " Creative Game Blaster sound card.",
             cpuType="80186", cpuCycles=1400, soundBlasterModel="gb",
             videoCardType="mcga", memsizeMB=0, memsizeKB=640),
     machine("1990_ibm_ps2_25_286", "1990 IBM PS/2 25 286",
-            "A 286 at 10 MHz, 4 MB of RAM, VGA (emulated as an S3), and a Sound Blaster 1.0.",
+            "A 286 at 10 MHz, 4 MB of memory, VGA video (emulated as an S3 "
+            "card) and a Sound Blaster 1.0.",
             cpuType="286", cpuCycles=2300, soundBlasterModel="sb1",
             videoCardType="svga_s3", memsizeMB=4),
     machine("1991_ibm_ps2_25_386", "1991 IBM PS/2 25 386",
-            "A 386 at 25 MHz, 6 MB of RAM, VGA (emulated as an S3), and a Sound Blaster 2.0.",
+            "A 386 at 25 MHz, 6 MB of memory, VGA video (emulated as an S3 "
+            "card) and a Sound Blaster 2.0.",
             cpuType="386", cpuCycles=6000, soundBlasterModel="sb2",
             videoCardType="svga_s3", memsizeMB=6),
     machine("1993_ibm_ps2_53_slc2_486", "1993 IBM PS/2 53 SLC2 486",
-            "A 486 at 50 MHz, 32 MB of RAM, SVGA, and a Sound Blaster Pro 2. The default machine: fast enough for most DOS games without being an anachronism.",
+            "A 486 at 50 MHz, 32 MB of memory, SVGA video and a Sound "
+            "Blaster Pro 2. This is the default machine. It is fast enough "
+            "for most DOS games and still typical of their time.",
             cpuType="486", cpuCycles=22000, soundBlasterModel="sbpro2",
             videoCardType="svga_s3", memsizeMB=32),
     machine("1994_ibm_ps2_76i_slc2_486", "1994 IBM PS/2 76i SLC2 486",
-            "A 486 at 100 MHz, 64 MB of RAM, SVGA, and a Sound Blaster 16.",
+            "A 486 at 100 MHz, 64 MB of memory, SVGA video and a Sound "
+            "Blaster 16.",
             cpuType="486", cpuCycles=77000, soundBlasterModel="sb16",
             videoCardType="svga_s3", memsizeMB=64),
     machine("1997_ibm_aptiva_2140", "1997 IBM Aptiva 2140",
-            "A Pentium II at 233 MHz, 96 MB of RAM, SVGA with 8 MB of video memory, a Sound Blaster 16 ViBRA, and the disk and CD-ROM behaviour a Windows 95 or 98 install expects.",
+            "A Pentium II at 233 MHz, 96 MB of memory, SVGA video with 8 MB "
+            "of video memory and a Sound Blaster 16 ViBRA. The disk and CD-"
+            "ROM settings are the ones an installation of Windows 95 or 98 "
+            "expects.",
             cpuType="pentium_ii", cpuCycles=200000, soundBlasterModel="sb16vibra",
             videoCardType="svga_s3", memsizeMB=96, **WIN9X),
     machine("1999_ibm_thinkpad_240", "1999 IBM Thinkpad 240",
-            "A Pentium III at 300 MHz, 128 MB of RAM, an S3 Trio64 with 16 MB of video memory, a Sound Blaster 16 ViBRA, and the disk and CD-ROM behaviour a Windows 95 or 98 install expects.",
+            "A Pentium III at 300 MHz, 128 MB of memory, an S3 Trio64 video "
+            "card with 16 MB of video memory and a Sound Blaster 16 ViBRA. "
+            "The disk and CD-ROM settings are the ones an installation of "
+            "Windows 95 or 98 expects.",
             cpuType="pentium_iii", cpuCycles=200000, soundBlasterModel="sb16vibra",
             videoCardType="svga_s3trio64", memsizeMB=128, **{**WIN9X, "videoMemoryMB": 16}),
 ]
@@ -269,25 +284,29 @@ def FW(id, display, description, size, name, sha1, label, when):
 
 def midi_is(v): return {"setting": "midiDevice", "is": v}
 def flag(n): return {"setting": n, "is": True}
-ROLAND = "Dumped from a Roland unit you own. "
+ROLAND = "Copied from a Roland unit you own. "
 FIRMWARE = [
-    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "First generation, v1.07.",
+    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "First generation, version 1.07.",
        65536, "MT32_CONTROL.ROM", "B083518FFFB7F66B03C23B7EB4F868E62DC5A987", "MT-32 v1.07", midi_is("mt32_old")),
-    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "Second generation, v2.04.",
+    FW("MT32_CONTROL.ROM", "Roland MT-32 control ROM", ROLAND + "Second generation, version 2.04.",
        131072, "MT32_CONTROL.ROM", "2C16432B6C73DD2A3947CBA950A0F4C19D6180EB", "MT-32 v2.04", midi_is("mt32_new")),
-    FW("MT32_PCM.ROM", "Roland MT-32 PCM ROM", ROLAND + "The one PCM ROM every MT-32 has.",
+    FW("MT32_PCM.ROM", "Roland MT-32 PCM ROM", ROLAND + "Every MT-32 has this same PCM ROM.",
        524288, "MT32_PCM.ROM", "F6B1EEBC4B2D200EC6D3D21D51325D5B48C60252", "MT-32 PCM",
        {"setting": "midiDevice", "in": ["mt32_old", "mt32_new"]}),
-    FW("CM32L_CONTROL.ROM", "Roland CM-32L control ROM", ROLAND + "CM-32L / LAPC-I, v1.02.",
+    FW("CM32L_CONTROL.ROM", "Roland CM-32L control ROM", ROLAND + "CM-32L or LAPC-I, version 1.02.",
        65536, "CM32L_CONTROL.ROM", "A439FBB390DA38CADA95A7CBB1D6CA199CD66EF8", "CM-32L v1.02", midi_is("cm32l")),
-    FW("CM32L_PCM.ROM", "Roland CM-32L PCM ROM", ROLAND + "CM-32L / CM-64 / LAPC-I.",
+    FW("CM32L_PCM.ROM", "Roland CM-32L PCM ROM", ROLAND + "CM-32L, CM-64 or LAPC-I.",
        1048576, "CM32L_PCM.ROM", "289CC298AD532B702461BFC738009D9EBE8025EA", "CM-32L PCM", midi_is("cm32l")),
-    FW("FONT.ROM", "PC-98 font ROM", "The character ROM of an NEC PC-98 you own: 8x8, 8x16 and the 16x16 kanji.",
+    FW("FONT.ROM", "PC-98 font ROM", "The character ROM of an NEC PC-98 you own. It holds the 8x8 and "
+        "8x16 characters and the 16x16 kanji.",
        288768, "FONT.ROM", "78BA9960F135372825AB7244B5E4E73A810002FF", "NEC PC-98 FONT.ROM", flag("pc98FontRom")),
-    FW("SOUND.ROM", "PC-98 sound BIOS", "The 16 KiB BIOS of a PC-9801-26K or -86 sound board you own.",
+    FW("SOUND.ROM", "PC-98 sound BIOS", "The BIOS (16 KiB) of a PC-9801-26K or PC-9801-86 sound board you "
+        "own.",
        16384, "SOUND.ROM", "D5DBC4FEA3B8367024D363F5351BAECD6ADCD8EF", "NEC PC-9801-26K/86 SOUND.ROM", flag("pc98SoundBios")),
 ] + [
-    FW(f"2608_{n}.wav", f"PC-98 rhythm sample ({what})", "One of the six drum samples inside the YM2608 (OPNA) of a PC-9801-86 sound board, as the WAV files PC-98 emulators share. Without them the board plays with its rhythm channel silent.",
+    FW(f"2608_{n}.wav", f"PC-98 rhythm sample ({what})", "One of the six drum samples inside the sound chip (YM2608) of a "
+        "PC-9801-86 sound board, as the WAV files that PC-98 emulators "
+        "share. Without them the board's drum channel is silent.",
        size, f"2608_{n}.wav", sha, f"YM2608 {what}", flag("pc98RhythmSamples"))
     for n, what, size, sha in [
         ("bd", "bass drum", 19192, "0A56C142EF40CEC50F3EE56A6E42D0029C9E2818"),
@@ -298,9 +317,13 @@ FIRMWARE = [
         ("rim", "rim shot", 5288, "C65592330C9DD84011151DAED52F9AEC926B7E56"),
     ]
 ] + [
-    FW("IBMBASIC.ROM", "IBM ROM BASIC", "The 32 KiB BASIC ROM set of an IBM 5150 you own, as one image for F6000h (often named IBMROMBASIC-F6000h-1982-10-27.ROM).",
+    FW("IBMBASIC.ROM", "IBM ROM BASIC", "The BASIC ROMs (32 KiB) of an IBM 5150 you own, as one image for "
+        "address F6000h. The file is often named "
+        "IBMROMBASIC-F6000h-1982-10-27.ROM.",
        32768, "IBMROMBASIC-F6000h-1982-10-27.ROM", "07449EBCA18F979B9AB748582B736E402F2BF940", "IBM BASIC C1.10", flag("ibmRomBasic")),
-    FW("VGABIOS.BIN", "Video BIOS", "The video BIOS of the card chosen in Video Card Type, 1 to 64 KiB, dumped from a card you own. DOSBox-X knows et4000.bin for svga_et4000 and the S3 Trio64 v1.5-07 BIOS for svga_s3.",
+    FW("VGABIOS.BIN", "Video BIOS", "The video BIOS of the card chosen in Video Card Type (1 to 64 KiB),"
+        " copied from a card you own. DOSBox-X recognises et4000.bin for "
+        "svga_et4000 and the S3 Trio64 BIOS version 1.5-07 for svga_s3.",
        0, "et4000.bin", None, "Video BIOS", flag("vgaBiosRom")),  # size 0: any, a video BIOS is 1 to 64 KiB
 ]
 
@@ -410,141 +433,266 @@ config = {
     "settings": [
         {
             "name": "joystick1Enabled", "display": "Enable Joystick 1",
-            "description": "Determines whether a joystick will be plugged in the IBM PC Gameport 1",
+            "description": "Whether a joystick is plugged into game port 1.",
             "type": "bool", "default": True, "sync": True
         },
         {
             "name": "joystick2Enabled", "display": "Enable Joystick 2",
-            "description": "Determines whether a joystick will be plugged in the IBM PC Gameport 2",
+            "description": "Whether a joystick is plugged into game port 2.",
             "type": "bool", "default": True, "sync": True
         },
         {
             "name": "mouseEnabled", "display": "Enable Mouse",
-            "description": "Determines whether a mouse will be plugged in",
+            "description": "Whether a mouse is plugged in.",
             "type": "bool", "default": True, "sync": True
         },
         {
             "name": "mouseSensitivity", "display": "Mouse Relative Sensitivity",
-            "description": "Multiplies every relative mouse movement before the machine sees it, in mickeys. It applies to Mouse Speed X/Y and to the movement a pointer placed with Mouse Set Position implies, so it scales the pointer's whole travel, not its destination: an absolute position still lands where it says, but it takes this many times as many mickeys to get there. Was 3.0, which is the BizHawk integration's value and moved the DOS cursor about three times as far as the host pointer asked for.",
+            "description": "Every relative mouse movement is multiplied by this number "
+                "before the machine receives it. It applies to Mouse Speed "
+                "X/Y and to the movement that Mouse Set Position causes. It "
+                "changes how far the mouse has to travel, not where the "
+                "pointer ends: a position set with Mouse Set Position still "
+                "lands where it says. The value used to be 3.0 (the value in"
+                " the BizHawk version of this core), which moved the DOS "
+                "pointer about three times as far as asked.",
             "type": "float", "default": 0.5, "sync": True
         },
         {
             "name": "chimeraMouseDriver", "display": "Use Chimera Mouse Driver",
-            "description": "Makes Mouse Position (with Mouse Set Position held) place the Windows 3.1, 95 and 98 pointer exactly, instead of nudging it through Windows' own acceleration. Drive B: holds Chimera's mouse drivers and their installer, and before anything else starts the installer puts the right one into the Windows on drive C: (Windows 95/98: CHIMABS.EXE, started from WIN.INI; Windows 3.1: VBADOS' VBMOUSE.DRV). It writes to C: only when the driver is not there yet, and leaves a disk with no Windows alone. Turning this off removes drive B: but not an installed driver. Not on PC-98 machines, which these drivers are not for. B:\\README.TXT says more, and B:\\INSTALL installs by hand.",
+            "description": "Lets Mouse Position (with Mouse Set Position held) place "
+                "the pointer exactly in Windows 3.1, 95 and 98. Without it "
+                "the pointer is pushed through Windows' own mouse "
+                "acceleration and does not land exactly. With this on, drive"
+                " B: holds Chimera's mouse drivers and their installer. "
+                "Before anything else starts, the installer puts the right "
+                "driver into the Windows found on drive C: (CHIMABS.EXE, "
+                "started from WIN.INI, for Windows 95 and 98, and VBADOS' "
+                "VBMOUSE.DRV for Windows 3.1). It writes to C: only when the"
+                " driver is not there yet, and it leaves a disk without "
+                "Windows alone. Turning this off removes drive B: but does "
+                "not remove an installed driver. It is not available on "
+                "PC-98 machines, which these drivers are not made for. "
+                "B:\\README.TXT says more, and B:\\INSTALL installs the driver"
+                " by hand.",
             "type": "bool", "default": True, "sync": True
         },
         {
             "name": "formattedHardDisk", "display": "Mount Formatted Hard Disk Drive",
-            "description": "Determines whether to mount an empty writable formatted hard disk in drive C:. The hard disk will be fully located in memory so make sure you have enough RAM available. Its contents are this core's save data (Emulator > Export Save Data). This value will be ignored if a hard disk image (.hdd) is provided.",
+            "description": "Whether an empty, formatted, writable hard disk is put in "
+                "as drive C:. The disk is kept completely in memory, so make"
+                " sure your computer has enough memory. Its contents are "
+                "this core's save data (Emulator > Export Save Data). This "
+                "setting is ignored when a hard disk image is given.",
             "type": "enum",
             "options": ["none", "21mb", "41mb", "241mb", "504mb", "2014mb"],
             "default": "none", "sync": True
         },
         {
             "name": "forceFPSNumerator", "display": "Force FPS Numerator",
-            "description": "Forces a numerator for FPS: how many frontend frames to run per second of emulation. We recommend leaving this value unmodified, to follow the core's own video refresh rate. Set both numerator and denominator to force.",
+            "description": "The top number of a forced frame rate (frames per second of"
+                " emulated time, as a fraction). Leave it unchanged to "
+                "follow the machine's own video refresh rate, which is "
+                "recommended. To force a rate, set both this and Force FPS "
+                "Denominator.",
             "type": "int", "default": 0, "sync": True
         },
         {
             "name": "forceFPSDenominator", "display": "Force FPS Denominator",
-            "description": "Forces a denominator for FPS: how many frontend frames to run per second of emulation. We recommend leaving this value unmodified, to follow the core's own video refresh rate. Set both numerator and denominator to force.",
+            "description": "The bottom number of a forced frame rate. Leave it "
+                "unchanged to follow the machine's own video refresh rate, "
+                "which is recommended. To force a rate, set both this and "
+                "Force FPS Numerator.",
             "type": "int", "default": 0, "sync": True
         },
         {
             "name": "cpuCycles", "display": "CPU Cycles",
-            "description": "How many CPU cycles the machine executes per emulated millisecond - this, not a clock speed, is how DOSBox measures a CPU. Roughly 315 for a 4.77 MHz 8086, 2300 for a 10 MHz 286, 22000 for a 50 MHz 486, 200000 for a late Pentium. A game that runs too fast wants fewer; one that stutters wants more. Always a fixed count: DOSBox-X's 'auto' and 'max' settings chase the host's own speed, which a movie cannot reproduce.",
+            "description": "How many processor cycles the machine executes in each "
+                "emulated millisecond. DOSBox measures processor speed this "
+                "way and not in MHz. Rough values are 315 for a 4.77 MHz "
+                "8086, 2300 for a 10 MHz 286, 22000 for a 50 MHz 486 and "
+                "200000 for a late Pentium. Lower it for a game that runs "
+                "too fast and raise it for one that stutters. It is always a"
+                " fixed number. DOSBox-X's 'auto' and 'max' follow the speed"
+                " of your computer, which a movie could not reproduce.",
             "type": "int", "default": 22000, "min": 1, "max": 10000000, "sync": True
         },
         {
             "name": "cpuType", "display": "CPU Type",
-            "description": "Which x86 the machine is. This decides the instruction set a program may use, not how fast it runs (that is CPU Cycles). 'auto' lets DOSBox-X pick the type that suits the rest of the machine. The '_prefetch' variants add the real chip's prefetch queue, which a few timing-sensitive titles need.",
+            "description": "Which x86 processor the machine has. It decides which "
+                "instructions a program can use, not how fast it runs (that "
+                "is CPU Cycles). 'auto' lets DOSBox-X choose the type that "
+                "fits the rest of the machine. The choices ending in "
+                "'_prefetch' also imitate the real chip's instruction queue,"
+                " which a few programs that depend on exact timing need.",
             "type": "enum", "options": CPU_TYPES, "default": "486", "sync": True
         },
         {
             "name": "cpuCore", "display": "CPU Core",
-            "description": "The interpreter that executes the x86. 'normal' is the accurate one and what every machine here uses; 'simple' is a faster one for real-mode-only software; 'full' is the slowest and most literal. DOSBox-X's recompiling ('dynamic') cores are not built into this core: a JIT cannot be made to produce the same result on every machine, and a movie needs it to.",
+            "description": "Which of DOSBox-X's interpreters runs the x86 code. "
+                "'normal' is the accurate one and is used by every machine "
+                "preset here. 'simple' is faster and only for real-mode "
+                "software. 'full' is the slowest and the most exact. "
+                "DOSBox-X's recompiling ('dynamic') cores are not included, "
+                "because they cannot be made to give the same result on "
+                "every computer, and a movie needs that.",
             "type": "enum", "options": CPU_CORES, "default": "normal", "sync": True
         },
         {
             "name": "videoCardType", "display": "Video Card Type",
-            "description": "Which display adapter is fitted. This is the machine's video hardware, so it decides what modes a game can find: 'mda' is monochrome text only, 'cga' four colours, 'ega' sixteen, 'mcga'/'vgaonly' the plain PS/2 and VGA cards, and the svga_* entries are the accelerated 1990s cards (an ordinary VGA-era game is happy on svga_s3). 'pc98'/'pc9801'/'pc9821' make the machine an NEC PC-98 instead of an IBM PC.",
+            "description": "Which video card the machine has. It decides which video "
+                "modes a game can use. 'mda' is monochrome text only, 'cga' "
+                "has four colours and 'ega' sixteen. 'mcga' and 'vgaonly' "
+                "are the plain PS/2 and VGA cards. The svga_ choices are the"
+                " faster cards of the 1990s, and an ordinary VGA game works "
+                "well on svga_s3. 'pc98', 'pc9801' and 'pc9821' turn the "
+                "machine into an NEC PC-98 instead of an IBM PC.",
             "type": "enum", "options": VIDEO_CARDS, "default": "svga_s3", "sync": True
         },
         {
             "name": "memsizeMB", "display": "RAM Size (MB)",
-            "description": "Whole megabytes of RAM. Period machines had very little: 0 (with RAM Size (KB) supplying the real figure) for a pre-1987 PC, 1 to 8 for the 286/386 years, 32 to 128 for a late Pentium. More RAM is not always better - some DOS games refuse to start when they find more than they expect.",
+            "description": "The memory size in whole megabytes. Computers of the time "
+                "had very little: 0 for a PC from before 1987 (RAM Size (KB)"
+                " then gives the real amount), 1 to 8 for the 286 and 386 "
+                "years, and 32 to 128 for a late Pentium. More memory is not"
+                " always better, because some DOS games refuse to start when"
+                " they find more than they expect.",
             "type": "int", "default": 32, "min": 0, "max": 256, "sync": True
         },
         {
             "name": "memsizeKB", "display": "RAM Size (KB)",
-            "description": "Kilobytes of RAM ADDED to RAM Size (MB), for the machines that had less than a megabyte: 256 for a 1981 PC, 640 for an XT or a PS/2 25. Leave at 0 on anything from 1986 on, where RAM Size (MB) says it all.",
+            "description": "Kilobytes of memory ADDED to RAM Size (MB), for machines "
+                "with less than a megabyte: 256 for a 1981 PC and 640 for an"
+                " XT or a PS/2 25. Leave it at 0 for anything from 1986 on, "
+                "where RAM Size (MB) is enough.",
             "type": "int", "default": 0, "min": 0, "max": 262144, "sync": True
         },
         {
             "name": "pcSpeaker", "display": "PC Speaker",
-            "description": "Whether the machine has its internal beeper wired up. Every machine here had one, and DOS games that predate sound cards play their music on it; disabling it silences that music without changing anything else.",
+            "description": "Whether the machine's built-in speaker is connected. Every "
+                "machine here had one, and DOS games from before sound cards"
+                " play their music on it. Turning it off silences that music"
+                " and changes nothing else.",
             "type": "enum", "options": ["disabled", "enabled"],
             "default": "enabled", "sync": True
         },
         {
             "name": "soundBlasterModel", "display": "Sound Blaster Model",
-            "description": "Which sound card is fitted. 'none' is a machine with no card at all (pre-1987 PCs had none); 'gb' is Creative's Game Blaster; sb1/sb2 are the 8-bit Sound Blasters, sbpro1/sbpro2 the stereo Pros, sb16/sb16vibra the 16-bit ones. Pick the card the game was written for - a 1990 game will not find an sb16's extras and a 1995 game may refuse an sb1.",
+            "description": "Which sound card the machine has. 'none' means no card, as "
+                "in PCs before 1987. 'gb' is Creative's Game Blaster. 'sb1' "
+                "and 'sb2' are the 8-bit Sound Blasters, 'sbpro1' and "
+                "'sbpro2' the stereo Sound Blaster Pro cards, and 'sb16' and"
+                " 'sb16vibra' the 16-bit ones. Choose the card the game was "
+                "written for. A game from 1990 does not use the extra "
+                "features of an sb16, and a game from 1995 may refuse an "
+                "sb1.",
             "type": "enum", "options": SB_MODELS, "default": "sbpro2", "sync": True
         },
         {
             "name": "soundBlasterIRQ", "display": "Sound Blaster IRQ",
-            "description": "The interrupt line the Sound Blaster answers on. -1 leaves DOSBox-X to use the model's own factory default (7 for the early cards, 5 for a Sound Blaster 16), which is what a game's own setup program expects to find.",
+            "description": "The interrupt line (IRQ) the Sound Blaster uses. -1 uses "
+                "the card model's factory default (7 for the early cards, 5 "
+                "for a Sound Blaster 16), which is what a game's setup "
+                "program expects.",
             "type": "int", "default": -1, "min": -1, "max": 15, "sync": True
         },
         {
             "name": "videoMemoryMB", "display": "Video Memory (MB)",
-            "description": "Megabytes on the video card, which is what caps the resolution and colour depth an SVGA card can offer: 1 reaches 1024x768 in 256 colours, 2 reaches 640x480 in true colour, 8 reaches 1600x1200 in true colour. -1 lets DOSBox-X fit the amount the chosen card shipped with. Ignored by the pre-VGA cards, which have a fixed amount.",
+            "description": "How many megabytes of memory the video card has. This "
+                "limits the resolution and number of colours an SVGA card "
+                "offers: 1 MB allows 1024x768 in 256 colours, 2 MB allows "
+                "640x480 in true colour and 8 MB allows 1600x1200 in true "
+                "colour. -1 uses the amount the chosen card was sold with. "
+                "Cards older than VGA have a fixed amount and ignore this.",
             "type": "int", "default": -1, "min": -1, "max": 64, "sync": True
         },
         {
             "name": "vesaModelistWidthLimit", "display": "VESA Mode List Width Limit",
-            "description": "Hides VESA modes wider than this many pixels from the list a program sees. Some DOS programs mishandle a long mode list or a mode larger than they can imagine; 1280 is DOSBox-X's own cap. 0 lists every mode the card can do, which is what a Windows 9x display driver wants.",
+            "description": "Hides VESA video modes wider than this many pixels from the"
+                " list a program gets. Some DOS programs cannot handle a "
+                "long list or a very large mode. 1280 is DOSBox-X's own "
+                "limit. 0 lists every mode the card has, which a Windows 95 "
+                "or 98 display driver needs.",
             "type": "int", "default": 1280, "min": 0, "max": 4096, "sync": True
         },
         {
             "name": "vesaModelistHeightLimit", "display": "VESA Mode List Height Limit",
-            "description": "The same cap on height. 1024 is DOSBox-X's own; 0 lists every mode.",
+            "description": "The same limit for the height of VESA video modes. 1024 is "
+                "DOSBox-X's own limit, and 0 lists every mode.",
             "type": "int", "default": 1024, "min": 0, "max": 4096, "sync": True
         },
         {
             "name": "dosVersion", "display": "Reported DOS Version",
-            "description": "The version DOSBox-X's built-in DOS reports to programs that ask. 'auto' lets it pick (currently 5.0, the safest for DOS gaming). 6.22 is the last real MS-DOS; 7.0 and 7.1 are the DOS underneath Windows 95 and 98, and are what an installer or a long-filename-aware program looks for. Has no effect when the machine boots a DOS of its own from a disk.",
+            "description": "The version number DOSBox-X's built-in DOS reports to "
+                "programs. 'auto' lets it choose (currently 5.0, the safest "
+                "for DOS games). 6.22 is the last real MS-DOS. 7.0 and 7.1 "
+                "are the DOS versions inside Windows 95 and 98, which some "
+                "installers and programs that use long file names look for. "
+                "It has no effect when the machine starts a DOS of its own "
+                "from a disk.",
             "type": "enum", "options": DOS_VERSIONS, "default": "auto", "sync": True
         },
         {
             "name": "hardDriveDataRateLimit", "display": "Hard Disk Data Rate (bytes/s)",
-            "description": "Slows the emulated hard disk to this many bytes per second, so a game that reads from disk takes as long as it did on the real machine. -1 uses DOSBox-X's own period-plausible limit; 0 removes the limit entirely, which is what a Windows 9x install wants and what plain DOSBox does.",
+            "description": "Limits the hard disk to this many bytes per second, so that"
+                " a game takes as long to read from disk as it did on a real"
+                " machine. -1 uses DOSBox-X's own limit for a machine of the"
+                " period. 0 removes the limit, which an installation of "
+                "Windows 95 or 98 needs and which is what plain DOSBox does.",
             "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
         },
         {
             "name": "floppyDriveDataRateLimit", "display": "Floppy Data Rate (bytes/s)",
-            "description": "The same limit for the floppy drives. -1 uses DOSBox-X's own; 0 makes floppy reads instant.",
+            "description": "The same limit for the floppy drives. -1 uses DOSBox-X's "
+                "own limit, and 0 makes floppy reads instant.",
             "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
         },
         {
             "name": "int13FakeIo", "display": "Fake INT 13h Disk I/O",
-            "description": "Makes the emulated IDE and floppy controllers react to BIOS disk calls as real hardware would - changing their registers, and raising fake virtual-8086 I/O traps and interrupts. Windows 3.11's and Windows 95's 32-bit disk access need this and will not drive the disks without it; a plain DOS machine does not, and switching it on costs nothing but does nothing. Sets int13fakeio and int13fakev86io on both IDE channels and int13fakev86io on the floppy controller.",
+            "description": "Makes the emulated hard disk and floppy controllers respond"
+                " to BIOS disk calls the way real hardware does. The 32-bit "
+                "disk access of Windows 3.11 and Windows 95 needs this and "
+                "cannot use the disks without it. A plain DOS machine does "
+                "not need it, and turning it on there does nothing and costs"
+                " nothing. In DOSBox-X's terms it sets int13fakeio and "
+                "int13fakev86io on both IDE channels and int13fakev86io on "
+                "the floppy controller.",
             "type": "bool", "default": False, "sync": True
         },
         {
             "name": "cdromInsertionDelayMs", "display": "CD-ROM Insertion Delay (ms)",
-            "description": "How long the drive reports an empty tray after a disc is swapped, in milliseconds - the time it would take somebody to change the disc. 0 leaves the drive's own default (no delay). Windows 95 and later need about 4000 before their auto-insert notification will notice a new disc.",
+            "description": "How long the CD-ROM drive reports that it is empty after a "
+                "disc is changed, in milliseconds. This stands for the time "
+                "a person takes to change the disc. 0 uses the drive's "
+                "default, which is no delay. Windows 95 and later need about"
+                " 4000 to notice a new disc automatically.",
             "type": "int", "default": 0, "min": 0, "max": 60000, "sync": True
         },
         {
             "name": "bootDrive", "display": "Boot From",
-            "description": "Boot the machine from a mounted drive instead of dropping to the DOS prompt: 'a' boots a bootable floppy image, 'c' boots an operating system installed on the hard disk. 'none' keeps the built-in DOS shell. (Chimera addition; BizHawk movies use 'none'.)",
+            "description": "Starts the machine from a drive instead of showing the DOS "
+                "prompt. 'a' starts from a bootable floppy image and 'c' "
+                "starts an operating system installed on the hard disk. "
+                "'none' keeps DOSBox-X's built-in DOS prompt. This setting "
+                "was added for Chimera, and BizHawk movies use 'none'.",
             "type": "enum", "options": ["none", "a", "c"], "default": "none",
             "sync": True
         },
         {
             "name": "initialDrive", "display": "Initial Drive",
-            "description": "The drive the DOS shell starts on. 'auto' takes the first one the project actually mounted, in the order A: (a floppy), D: (a CD), C: (the hard disk). A letter asked for by name that has nothing mounted falls back to the same order. Z:, DOSBox-X's own drive of built-in commands, is never offered: a project always supplies a disk or gets a formatted one - the only exception is a project made of nothing but a configuration file, which does stay on Z:. Moving the shell off Z: changes what is on screen at the prompt, so a movie recorded before this setting existed replays on a machine whose prompt reads differently; set it to match if that matters. Ignored when Boot From boots an operating system, since the shell is then never reached.",
+            "description": "The drive the DOS prompt starts on. 'auto' uses the first "
+                "drive the project put a disk in, looking in the order A: (a"
+                " floppy), D: (a CD) and C: (the hard disk). If a drive is "
+                "named here and has no disk, the same order is used. Z:, "
+                "DOSBox-X's own drive of built-in commands, is never "
+                "offered, because a project always has a disk or gets a "
+                "formatted one. The one exception is a project made only of "
+                "a configuration file, which stays on Z:. The starting drive"
+                " changes what the prompt shows, so a movie recorded before "
+                "this setting existed plays back on a machine whose prompt "
+                "looks different. Set it to match if that matters. It is "
+                "ignored when Boot From starts an operating system, because "
+                "the prompt is then never shown.",
             "type": "enum", "options": ["auto", "a", "c", "d"], "default": "auto",
             "sync": True
         },
@@ -552,33 +700,56 @@ config = {
         # the defaults change nothing, so a BizHawk movie's machine is intact)
         {
             "name": "midiDevice", "display": "MIDI Device",
-            "description": "What is plugged into the MPU-401 MIDI port. 'none' leaves the port with nothing on the other end of it, which is how every one of these machines left the factory. 'mt32_old' is a first-generation Roland MT-32 (control ROM v1.07), which the earliest Sierra titles rely on the quirks of; 'mt32_new' is the second generation (v2.04); 'cm32l' is a Roland CM-32L / LAPC-I (v1.02), the MT-32 with the extra sound effects later games use. Each needs its control and PCM ROM, dumped from a unit you own.",
+            "description": "What is connected to the machine's MIDI port (MPU-401). "
+                "'none' leaves the port unconnected, as every one of these "
+                "machines was sold. 'mt32_old' is a first-generation Roland "
+                "MT-32 (control ROM version 1.07), whose peculiarities the "
+                "earliest Sierra games rely on. 'mt32_new' is the second "
+                "generation (version 2.04). 'cm32l' is a Roland CM-32L or "
+                "LAPC-I (version 1.02), an MT-32 with the extra sound "
+                "effects that later games use. Each needs its control ROM "
+                "and PCM ROM, copied from a unit you own.",
             "type": "enum", "options": ["none", "mt32_old", "mt32_new", "cm32l"],
             "default": "none", "sync": True
         },
         {
             "name": "pc98FontRom", "display": "Use PC-98 Font ROM",
-            "description": "Draw PC-98 text with a real NEC character ROM (FONT.ROM) instead of the built-in free font. Only meaningful with a pc98 video card type.",
+            "description": "Draws PC-98 text with a real NEC character ROM (FONT.ROM) "
+                "instead of the built-in free font. It only has an effect "
+                "when Video Card Type is one of the pc98 choices.",
             "type": "bool", "default": False, "sync": True
         },
         {
             "name": "pc98SoundBios", "display": "Use PC-98 Sound BIOS",
-            "description": "Map the PC-9801-26K/86 sound board's BIOS (SOUND.ROM) at CC000h. The FM board plays without it; games that call the sound BIOS do not. Only meaningful with a pc98 video card type.",
+            "description": "Adds the BIOS of the PC-9801-26K/86 sound board (SOUND.ROM)"
+                " to the machine, at address CC000h. The board's FM sound "
+                "works without it. Games that call the sound BIOS need it. "
+                "It only has an effect when Video Card Type is one of the "
+                "pc98 choices.",
             "type": "bool", "default": False, "sync": True
         },
         {
             "name": "pc98RhythmSamples", "display": "Use PC-98 Rhythm Samples",
-            "description": "Give the PC-9801-86 board's YM2608 its six built-in drum samples (2608_bd/sd/top/hh/tom/rim.wav). Without them FM music plays with no drums. Only meaningful with a pc98 video card type.",
+            "description": "Gives the sound chip of the PC-9801-86 board (YM2608) its "
+                "six built-in drum samples (2608_bd, sd, top, hh, tom and "
+                "rim .wav). Without them FM music plays with no drums. It "
+                "only has an effect when Video Card Type is one of the pc98 "
+                "choices.",
             "type": "bool", "default": False, "sync": True
         },
         {
             "name": "ibmRomBasic", "display": "Use IBM ROM BASIC",
-            "description": "Load IBM Cassette/ROM BASIC below the BIOS at F6000h, as an IBM 5150 has it. PC-DOS's BASICA needs it, and so does booting with no disk.",
+            "description": "Loads IBM's Cassette/ROM BASIC into the machine at address "
+                "F6000h, below the BIOS, as an IBM 5150 has it. PC-DOS's "
+                "BASICA needs it, and so does starting the machine with no "
+                "disk.",
             "type": "bool", "default": False, "sync": True
         },
         {
             "name": "vgaBiosRom", "display": "Use Real Video BIOS",
-            "description": "Run a real video BIOS dumped from the card chosen in Video Card Type, instead of the one DOSBox-X generates. For software that probes the card's BIOS.",
+            "description": "Uses a real video BIOS copied from the card chosen in Video"
+                " Card Type, instead of the one DOSBox-X makes itself. It is"
+                " for software that examines the card's BIOS.",
             "type": "bool", "default": False, "sync": True
         }
     ],
