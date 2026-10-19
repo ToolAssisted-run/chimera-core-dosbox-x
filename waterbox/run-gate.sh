@@ -828,4 +828,28 @@ for size in 2014mb 504mb 241mb 41mb 21mb; do
 	fi
 done
 
+# ---- the dynamic core (user-decided, 2026-10-19, chimera#316) ----------------
+# DOSBox-X's recompiler, offered as a setting with a warning that a movie made
+# with it may not play back the same on another computer. Its code is the
+# build's own, so it is not held to the native build here. In the sandbox it
+# must be one machine all the same: two runs the same run, a state saved and
+# loaded before every frame the straight run, and another run than the
+# interpreter's - which is how the setting is seen to reach the machine.
+dyn="--setting cpuCore=dynamic"
+d1="$(timeout 900 "$rw" "$core" $dyn --frames "$frames" 2>/dev/null | digests)"
+d2="$(timeout 900 "$rw" "$core" $dyn --frames "$frames" 2>/dev/null | digests)"
+drr="$(timeout 1800 "$rw" "$core" $dyn --frames "$frames" --rerecord 2>/dev/null | digests)"
+dnorm="$(timeout 900 "$rw" "$core" --frames "$frames" 2>/dev/null | digests)"
+if [ -z "$d1" ] || [ -z "$dnorm" ]; then
+	echo "FAIL dynamic (a run produced no digests)"; fail=1
+elif [ "$d1" != "$d2" ]; then
+	echo "FAIL dynamic (two runs on the dynamic core differ)"; fail=1
+elif [ "$d1" != "$drr" ]; then
+	echo "FAIL dynamic (a state saved and loaded every frame changed the run)"; fail=1
+elif [ "$d1" = "$dnorm" ]; then
+	echo "FAIL dynamic (the same run as the interpreter's: the setting did not reach the machine)"; fail=1
+else
+	echo "PASS dynamic ($frames frames on the recompiler: two runs the same, rerecord the same, another run than the interpreter's)"
+fi
+
 exit $fail

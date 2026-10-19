@@ -1025,3 +1025,22 @@ build/meson-native` produces run-native. Patches overlay at every
       both builds, and the deliberately absurd long filename proved rom
       staging and rom.name handling clean.
       Remaining: CHD + CD audio with real content, the user's movies.
+
+## The dynamic core, as a setting (user-decided, 2026-10-19, chimera#316)
+
+The owner decided DOSBox-X's recompiler is offered: `cpuCore` takes
+`dynamic` beside `normal`, `full` and `simple`, with `normal` still the
+default and every machine preset's. Its description warns that a movie made
+with it may not play back the same on another computer, so it is for speed
+and not for a run others are to replay. The recompiling cores were always
+compiled in (`C_DYNAMIC_X86`, `C_DYNREC` in config.h); only the setting left
+them out, on the belief that generated code could not be shown to give the
+native build's results.
+
+Measured in the gate's new `dynamic` leg (DOS booted to its prompt, 200
+frames): two sandboxed runs on the dynamic core are the same run, a state
+saved and loaded before every frame changes nothing, and the run differs from
+the interpreter's, which is how the setting is seen to reach the machine. By
+hand, the native build and the sandbox give the same digests on it too. Not
+measured: another computer, and a program that works the processor hard
+enough to show the speed (at the DOS prompt the two take the same time).
