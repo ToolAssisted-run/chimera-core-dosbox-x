@@ -169,6 +169,10 @@ bool dosdrv_floppy_activity();
 // Nonzero while dosbox reads input this frame - the lag-frame signal.
 bool dosdrv_input_was_read();
 
+// The mouse driver's cursor put at (x, y) in the program's virtual coordinates (as INT 33h reports them), within
+// the range the program set, as a movement there (oracle-run's mpos: the same place whatever the range).
+void dosdrv_mouse_place(int x, int y);
+
 // Memory domains, in a fixed order: 0 = Conventional Memory, 1 = Upper Memory
 // Area, 2 = Extended Memory (may be absent), 3 = Physical RAM, 4 = Video RAM,
 // 5 = Hard Disk Drive (absent when no HDD is mounted).

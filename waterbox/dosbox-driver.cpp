@@ -735,6 +735,25 @@ bool dosdrv_disk_activity() { return _diskDriveUsed; }
 bool dosdrv_floppy_activity() { return _floppyDriveUsed; }
 bool dosdrv_input_was_read() { return true; } // no lag concept yet (as in BizHawk)
 
+void dosdrv_mouse_place(int x, int y)
+{
+	double nx = x, ny = y;
+	if (nx < mouse.min_x) nx = mouse.min_x;
+	if (nx > mouse.max_x) nx = mouse.max_x;
+	if (ny < mouse.min_y) ny = mouse.min_y;
+	if (ny > mouse.max_y) ny = mouse.max_y;
+	const double dx = nx - mouse.x, dy = ny - mouse.y;
+	if (dx == 0 && dy == 0) return;
+	mouse.x = nx;
+	mouse.y = ny;
+	// the counters of a movement that far (mickeys)
+	mouse.mickey_x = (float)(dx * mouse.mickeysPerPixel_x);
+	mouse.mickey_y = (float)(dy * mouse.mickeysPerPixel_y);
+	mouse.mickey_accum_x += (float)(dx * mouse.mickeysPerPixel_x);
+	mouse.mickey_accum_y += (float)(dy * mouse.mickeysPerPixel_y);
+	Mouse_AddEvent(MOUSE_HAS_MOVED);
+}
+
 // ---- memory domains -------------------------------------------------------
 #define DOS_CONVENTIONAL_MEMORY_SIZE (640 * 1024)
 #define DOS_UPPER_MEMORY_SIZE (384 * 1024)

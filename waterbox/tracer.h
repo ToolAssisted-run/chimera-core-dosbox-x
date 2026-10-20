@@ -55,3 +55,23 @@ void tracer_poke(uint32_t phys, const uint8_t *data, uint32_t len); // write gue
 // Write guest memory when probe `probe` fires for the `hit`-th time (1-based), right after its sample is taken:
 // input synchronized with the program (e.g. a game's per-tick key table) instead of with video frames.
 void tracer_probe_poke(int probe, uint32_t hit, uint32_t phys, const uint8_t *data, uint32_t len);
+
+// Replay log (oracle-run --replay PATH --prog LO HI): the program's own instructions are counted (CS in [LO, HI),
+// a REP string instruction once however often it restarts), and each thing the program gets from outside is
+// written with that count, in order: the hardware interrupts it takes, the ports it reads, its excursions out of its
+// own code (BIOS / DOS services: the registers on the way out and back), the frame ends. A recompilation run with
+// the same count replays them and must arrive at the same states. Records (one a line):
+//   M phys hex           64 bytes of the memory as the program starts (the chunks not all zero), then
+//   S 0 cs:ip ax=..      the registers there
+//   I pos vec cs:ip cx= fl= inProg ax= bx= dx= si= di= bp= sp= ds= es= ss=   a hardware interrupt taken
+//   P pos port width value cs:ip n last   n reads of a port by one instruction, one after another (the first at
+//                        pos, the last at last)
+//   X pos cs:ip ax= .. fl=, R ..   out of the program (a service's entry) and back
+//   F frame pos inProg cs:ip cx=   a frame's end
+void tracer_replay_open(const char *path, uint16_t lo, uint16_t hi);
+void tracer_replay_close();
+void tracer_replay_frame(int frame);
+uint64_t tracer_prog_count();
+void tracer_irq(unsigned vector);                                      // pic.cpp: a hardware interrupt is about to be taken
+void tracer_port_read(unsigned port, unsigned width, uint32_t value);  // iohandler.cpp: a port read
+void tracer_rep_restart();                                             // string.h: a REP string op stops early, will run again

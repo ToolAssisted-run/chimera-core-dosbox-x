@@ -1,6 +1,8 @@
 #include "tracer.h"
 #include <vector>
 #include <cstring>
+#include <string>
+#include <cstdio>
 #include "dosbox.h"
 #include "cpu.h"
 #include "regs.h"
@@ -25,7 +27,79 @@ struct ProbePoke { int probe; uint32_t hit, phys; std::vector<uint8_t> bytes; };
 static std::vector<ProbePoke> probePokes;   // sorted by (probe, hit) as added; applied when the hit comes
 static std::vector<Watch> watches;
 
-static void recompute() { tracer_active = logInstr || !probes.empty() || !watches.empty() || injState == 1 || injState == 2; }
+static FILE *rlog = nullptr; static bool rlogPipe = false; static uint16_t progLo = 0, progHi = 0; static uint64_t progCount = 0;
+static bool inProg = false, repRestart = false, irqOutside = false; static uint16_t repCs = 0, repIp = 0, irqCs = 0, irqIp = 0;
+// the nesting of excursions: 'E' an excursion (the program called out), 'H' a program handler of an interrupt taken
+// while outside (it returns into the excursion at cs:ip; its entry and that return are not excursion ends)
+struct Level { char kind; uint16_t cs, ip; };
+static std::vector<Level> levels;
+static void recompute() { tracer_active = logInstr || !probes.empty() || !watches.empty() || injState == 1 || injState == 2 || rlog; }
+
+// port reads, run-length coded: the same port, width, value and instruction again and again (a polling loop)
+static struct { unsigned port, width; uint32_t value; uint16_t cs, ip; uint64_t pos, last; uint32_t n; } pr; static bool prPending = false;
+static void pr_flush() {
+	if (!prPending) return;
+	fprintf(rlog, "P %llu %X %u %X %04X:%04X %u %llu\n", (unsigned long long)pr.pos, pr.port, pr.width, pr.value, pr.cs, pr.ip, pr.n, (unsigned long long)pr.last);
+	prPending = false;
+}
+static void log_regs(char kind) {
+	TracerRegs r; tracer_read_regs(&r);
+	fprintf(rlog, "%c %llu %04X:%04X ax=%04X bx=%04X cx=%04X dx=%04X si=%04X di=%04X bp=%04X sp=%04X ds=%04X es=%04X ss=%04X fl=%04X\n", kind, (unsigned long long)progCount,
+		r.cs, r.eip & 0xFFFF, r.eax & 0xFFFF, r.ebx & 0xFFFF, r.ecx & 0xFFFF, r.edx & 0xFFFF, r.esi & 0xFFFF, r.edi & 0xFFFF, r.ebp & 0xFFFF, r.esp & 0xFFFF, r.ds, r.es, r.ss, r.eflags & 0xFFFF);
+}
+// a path ending in .zst is written through zstd
+void tracer_replay_open(const char *path, uint16_t lo, uint16_t hi) {
+	size_t n = strlen(path);
+	rlogPipe = n > 4 && !strcmp(path + n - 4, ".zst");
+	if (rlogPipe) { std::string cmd = std::string("zstd -q -3 -T4 -f -o '") + path + "'"; rlog = popen(cmd.c_str(), "w"); }
+	else rlog = fopen(path, "w");
+	progLo = lo; progHi = hi; progCount = 0; inProg = repRestart = prPending = irqOutside = false; levels.clear();
+	if (rlog) setvbuf(rlog, nullptr, _IOFBF, 1 << 20);
+	recompute();
+}
+void tracer_replay_close() { if (rlog) { pr_flush(); if (rlogPipe) pclose(rlog); else fclose(rlog); rlog = nullptr; } recompute(); }
+uint64_t tracer_prog_count() { return progCount; }
+void tracer_replay_frame(int frame) {
+	if (!rlog) return;
+	pr_flush();
+	fprintf(rlog, "F %d %llu %d %04X:%04X cx=%04X\n", frame, (unsigned long long)progCount, inProg ? 1 : 0, SegValue(cs), (unsigned)(reg_eip & 0xFFFF), (unsigned)(reg_ecx & 0xFFFF));
+}
+// the program's side of the line at cs:ip (before the instruction there runs): crossing it is an excursion's start
+// (X) or end (R), or a handler's entry or return when an interrupt was taken outside
+static bool replay_sync(uint16_t curCs, uint16_t curIp) {
+	const bool p = curCs >= progLo && curCs < progHi;
+	if (irqOutside && !p) irqOutside = false;   // (that interrupt's handler is not the program's)
+	if (p && !inProg) {   // into the program: a handler of an interrupt taken outside, or the end of an excursion
+		if (irqOutside) { levels.push_back({'H', irqCs, irqIp}); irqOutside = false; }
+		else if (!levels.empty() && levels.back().kind == 'E') { pr_flush(); log_regs('R'); levels.pop_back(); }
+	} else if (!p && inProg) {   // out of the program: a handler returning into its excursion, or a new excursion
+		if (!levels.empty() && levels.back().kind == 'H' && levels.back().cs == curCs && levels.back().ip == curIp) levels.pop_back();
+		else if (progCount) { pr_flush(); log_regs('X'); levels.push_back({'E', 0, 0}); }
+	}
+	inProg = p;
+	return p;
+}
+void tracer_irq(unsigned vector) {
+	if (!rlog) return;
+	// the side of the line where the interrupt finds the program (the last instruction may have crossed it)
+	replay_sync(SegValue(cs), (uint16_t)reg_eip);
+	pr_flush();
+	TracerRegs r; tracer_read_regs(&r);
+	// (then the other registers: the replay checks them where the program was, and runs a handler of an interrupt
+	// taken outside on the stack where it ran)
+	fprintf(rlog, "I %llu %02X %04X:%04X cx=%04X fl=%04X %d ax=%04X bx=%04X dx=%04X si=%04X di=%04X bp=%04X sp=%04X ds=%04X es=%04X ss=%04X\n",
+		(unsigned long long)progCount, vector & 0xFF, r.cs, r.eip & 0xFFFF, r.ecx & 0xFFFF, r.eflags & 0xFFFF, inProg ? 1 : 0,
+		r.eax & 0xFFFF, r.ebx & 0xFFFF, r.edx & 0xFFFF, r.esi & 0xFFFF, r.edi & 0xFFFF, r.ebp & 0xFFFF, r.esp & 0xFFFF, r.ds, r.es, r.ss);
+	if (!inProg && progCount) { irqOutside = true; irqCs = r.cs; irqIp = (uint16_t)r.eip; }
+}
+void tracer_port_read(unsigned port, unsigned width, uint32_t value) {
+	if (!rlog || !inProg) return;
+	const uint16_t c = SegValue(cs), i = (uint16_t)reg_eip;
+	if (prPending && pr.port == port && pr.width == width && pr.value == value && pr.cs == c && pr.ip == i) { pr.n++; pr.last = progCount; return; }
+	pr_flush();
+	pr.port = port; pr.width = width; pr.value = value; pr.cs = c; pr.ip = i; pr.pos = pr.last = progCount; pr.n = 1; prPending = true;
+}
+void tracer_rep_restart() { repRestart = true; repCs = SegValue(cs); repIp = (uint16_t)reg_eip; }
 
 static TracerEvent &push() {
 	if (ring.size() != cap) { ring.assign(cap, TracerEvent{}); head = count = 0; }
@@ -59,8 +133,33 @@ void tracer_inject(uint16_t whenCs, uint16_t whenIp, const TracerRegs &regs) { i
 int tracer_inject_state() { return injState; }
 void tracer_poke(uint32_t phys, const uint8_t *data, uint32_t len) { for (uint32_t i = 0; i < len; i++) phys_writeb(phys + i, data[i]); }
 
+// the machine as the program starts (its first instruction): the 640 KB in 64-byte records of the chunks not all zero
+// ("M phys hex") and the registers ("S"), for the replay to check its own start against
+static void replay_start_state() {
+	static const char hexd[] = "0123456789ABCDEF";
+	char line[160];
+	for (uint32_t a = 0; a < 0xA0000; a += 64) {
+		uint8_t b[64]; bool any = false;
+		for (int k = 0; k < 64; k++) { b[k] = phys_readb(a + k); any = any || b[k]; }
+		if (!any) continue;
+		int n = snprintf(line, sizeof line, "M %05X ", a);
+		for (int k = 0; k < 64; k++) { line[n++] = hexd[b[k] >> 4]; line[n++] = hexd[b[k] & 15]; }
+		line[n++] = '\n'; line[n] = 0;
+		fputs(line, rlog);
+	}
+	log_regs('S');
+}
+
 void tracer_hook() {
 	const uint16_t curCs = SegValue(cs), curIp = (uint16_t)reg_eip;
+	if (rlog) {
+		const bool p = replay_sync(curCs, curIp);
+		if (p && progCount == 0) replay_start_state();
+		if (p) {
+			if (repRestart && curCs == repCs && curIp == repIp) repRestart = false;   // (a string op resuming: counted when it began)
+			else progCount++;
+		}
+	}
 	if (injState == 1 && curCs == injWhenCs && curIp == injWhenIp) {
 		tracer_read_regs(&injSaved);
 		TracerRegs r = injRegs;

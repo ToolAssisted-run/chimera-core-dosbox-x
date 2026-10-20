@@ -24,6 +24,9 @@
 #include "callback.h"
 #include "logging.h"
 #include "pic.h"
+#ifdef CHIMERA_TRACER
+#include "../../waterbox/tracer.h" // chimera: replay log (oracle-run only)
+#endif
 #include "timer.h"
 #include "setup.h"
 #include "control.h"
@@ -530,11 +533,17 @@ static void slave_startIRQ(){
 
     slave.start_irq(pic1_irq);
     master.start_irq(master_cascade_irq);
+#ifdef CHIMERA_TRACER
+    if (tracer_active) tracer_irq((unsigned int)slave.vector_base + (unsigned int)pic1_irq);
+#endif
     CPU_HW_Interrupt((unsigned int)slave.vector_base + (unsigned int)pic1_irq);
 }
 
 static void inline master_startIRQ(Bitu i){
     master.start_irq(i);
+#ifdef CHIMERA_TRACER
+    if (tracer_active) tracer_irq(master.vector_base + i);
+#endif
     CPU_HW_Interrupt(master.vector_base + i);
 }
 

@@ -4,6 +4,8 @@
 //
 // usage: oracle-run --workdir DIR --rom FILE [--setting NAME=VALUE]... [--autoexec LINE]...
 //                   --script FILE --events FILE [--dump-video PREFIX] [--fmtrace PATH] [--verbose]
+// --replay PATH --prog LO HI: the replay log (tracer.h): the program's instructions counted (CS in [LO, HI), hex),
+//            its interrupts, port reads, BIOS/DOS excursions and the frame ends written with that count
 // --fmtrace: every byte written to the FM chip's ports (0x388-0x38B, 0x220-0x223, 0x228/0x229):
 //            "emulated_ms port value frame" per line
 // script lines (frames are 0-based; '#' comments):
@@ -18,10 +20,15 @@
 //   poke F PHYS HEXBYTES    write bytes into conventional memory after frame F
 //   shot F PATH             write the screen after frame F as a 24-bit TGA
 //   mem F DOMAIN PATH       write a whole memory domain (index as dosdrv_domain; 0 = conventional) after frame F
+//   vram F PATH             write the video card's memory after frame F as DOSBox-X keeps it (u32 size, then the bytes:
+//                           a VGA's four planes interleaved, linear[4 * address + plane]), the DAC (256 x 6-bit RGB) and
+//                           the attribute controller's 16 palette registers
 //   audio F1 F2 PATH        write the mixer output of frames F1..F2 to PATH (raw s16 stereo interleaved, 44100 Hz);
 //                           PATH.frames gets "frame sample_pairs instructions_at_frame_end" per frame
 //   mouse F X Y             absolute mouse position (driver range 0..800 x 0..600) from frame F on; a change is sent as movement
 //   mrel F DX DY            relative mouse movement (mickey speed) on frame F only
+//   mpos F X Y              the mouse driver's cursor put at X,Y (the program's virtual coordinates, as INT 33h reports
+//                           them: 0-639 x 0-199 in the 320-pixel modes) at frame F, within the program's range
 //   button F left|right|middle 0|1   press (1) or release (0) a mouse button on frame F
 //   end F                   stop after frame F
 #include <cstdio>
@@ -41,6 +48,7 @@
 #include <dosbox.h>
 #include <inout.h>
 #include <pic.h>
+#include <vga.h>
 
 // the FM chip's port writes, by wrapping those ports' entries in DOSBox-X's handler table (re-wrapped
 // whenever DOSBox-X resolves or caches a handler there)
@@ -96,7 +104,7 @@ static int keyIndex(const std::string &n) {
 }
 
 struct KeyEv { int frame, key, level; };
-struct MouseEv { int frame, kind, a, b; };   // kind 0 = absolute pos, 1 = relative, 2 = button (a = 0 left 1 right 2 middle, b = level)
+struct MouseEv { int frame, kind, a, b; };   // kind 0 = absolute pos, 1 = relative, 2 = button (a = 0 left 1 right 2 middle, b = level), 3 = placed
 struct RamDump { int frame; std::string path; };
 struct TraceReq { int f1, f2; std::string path; };
 struct InjectReq { int frame; uint16_t whenCs, whenIp; TracerRegs regs; bool done; };
@@ -105,6 +113,7 @@ struct PokeReq { int frame; uint32_t phys; std::vector<uint8_t> bytes; };
 int main(int argc, char **argv) {
 	const char *workdir = "oracle-work", *rom = nullptr, *scriptPath = nullptr, *eventsPath = nullptr, *dumpPrefix = nullptr;
 	bool verbose = false;
+	const char *replayPath = nullptr; uint16_t progLo = 0, progHi = 0;
 	std::vector<std::string> autoexec;
 	DosDrvMachine m; m.joystick1 = m.joystick2 = false;
 	for (int i = 1; i < argc; i++) {
@@ -119,13 +128,15 @@ int main(int argc, char **argv) {
 		else if (!strcmp(argv[i], "--events") && i + 1 < argc) eventsPath = argv[++i];
 		else if (!strcmp(argv[i], "--dump-video") && i + 1 < argc) dumpPrefix = argv[++i];
 		else if (!strcmp(argv[i], "--verbose")) verbose = true;
+		else if (!strcmp(argv[i], "--replay") && i + 1 < argc) replayPath = argv[++i];
+		else if (!strcmp(argv[i], "--prog") && i + 2 < argc) { progLo = (uint16_t)strtoul(argv[i + 1], 0, 16); progHi = (uint16_t)strtoul(argv[i + 2], 0, 16); i += 2; }
 		else if (!strcmp(argv[i], "--fmtrace") && i + 1 < argc) { if (!(fmTrace = fopen(argv[++i], "w"))) { fprintf(stderr, "cannot write %s\n", argv[i]); return 2; } }
 		else { fprintf(stderr, "unknown arg %s\n", argv[i]); return 2; }
 	}
 	if (!rom || !scriptPath) { fprintf(stderr, "need --rom and --script\n"); return 2; }
 
 	// ---- script ----
-	struct ShotReq { int frame; std::string path; int domain; }; std::vector<ShotReq> shots, mems;
+	struct ShotReq { int frame; std::string path; int domain; }; std::vector<ShotReq> shots, mems, vrams;
 	struct AudioReq { int f1, f2; std::string path; FILE *f, *idx; }; std::vector<AudioReq> audios;
 	struct ProbePokeReq { std::string label; uint32_t hit, phys; std::vector<uint8_t> bytes; }; std::vector<ProbePokeReq> probePokes;
 	struct Probe32Req { uint32_t eip, phys, len; }; std::vector<Probe32Req> probes32; std::vector<std::string> probe32Labels;
@@ -161,9 +172,11 @@ int main(int argc, char **argv) {
 			}
 			else if (cmd == "shot" && n >= 3) shots.push_back({atoi(b), c, 0});
 			else if (cmd == "mem" && n >= 4) mems.push_back({atoi(b), d, atoi(c)});
+			else if (cmd == "vram" && n >= 3) vrams.push_back({atoi(b), c, 0});
 			else if (cmd == "audio" && n >= 4) audios.push_back({atoi(b), atoi(c), d, nullptr, nullptr});
 			else if (cmd == "mouse" && n >= 4) mouseEvs.push_back({atoi(b), 0, atoi(c), atoi(d)});
 			else if (cmd == "mrel" && n >= 4) mouseEvs.push_back({atoi(b), 1, atoi(c), atoi(d)});
+			else if (cmd == "mpos" && n >= 4) mouseEvs.push_back({atoi(b), 3, atoi(c), atoi(d)});
 			else if (cmd == "button" && n >= 4) mouseEvs.push_back({atoi(b), 2, !strcmp(c, "left") ? 0 : !strcmp(c, "right") ? 1 : 2, atoi(d)});
 			else if (cmd == "end" && n >= 2) endFrame = atoi(b);
 			else { fprintf(stderr, "bad script line: %s", line); return 2; }
@@ -191,6 +204,10 @@ int main(int argc, char **argv) {
 	if (!dosdrv_boot(cfg, &err)) { fprintf(stderr, "boot failed: %s\n", err.c_str()); return 1; }
 
 	// ---- arm tracer ----
+	if (replayPath) {
+		std::string rp = replayPath[0] == '/' ? std::string(replayPath) : std::string(replayPath);
+		tracer_replay_open(rp.c_str(), progLo, progHi);
+	}
 	for (size_t i = 0; i < probes.size(); i++) { if (probeMem[i].second) tracer_add_probe_mem(probes[i].first, probes[i].second, probeMem[i].first, probeMem[i].second); else tracer_add_probe(probes[i].first, probes[i].second); }
 	for (const auto &pp : probePokes) {
 		int id = -1; for (size_t i = 0; i < probeLabels.size(); i++) if (probeLabels[i] == pp.label) { id = (int)i; break; }
@@ -212,6 +229,7 @@ int main(int argc, char **argv) {
 		for (auto &m : mouseEvs) if (m.frame == fr) {
 			if (m.kind == 0) { in.mouse.posX = m.a; in.mouse.posY = m.b; }
 			else if (m.kind == 1) { in.mouse.speedX = m.a; in.mouse.speedY = m.b; }
+			else if (m.kind == 3) dosdrv_mouse_place(m.a, m.b);
 			else {
 				bool *p = m.b ? (m.a == 0 ? &in.mouse.leftPressed : m.a == 1 ? &in.mouse.rightPressed : &in.mouse.middlePressed)
 				              : (m.a == 0 ? &in.mouse.leftReleased : m.a == 1 ? &in.mouse.rightReleased : &in.mouse.middleReleased);
@@ -225,6 +243,7 @@ int main(int argc, char **argv) {
 		for (auto &r : injects) if (!r.done && r.frame <= fr && tracer_inject_state() != 1 && tracer_inject_state() != 2) { r.done = true; tracer_inject(r.whenCs, r.whenIp, r.regs); }
 		if (fmTrace) { fmFrame = fr; fmArm(); }
 		dosdrv_frame(in);
+		tracer_replay_frame(fr);
 		for (auto &a : audios) if (fr >= a.f1 && fr <= a.f2) {
 			if (!a.f && (!(a.f = fopen(a.path.c_str(), "wb")) || !(a.idx = fopen((a.path + ".frames").c_str(), "w")))) { fprintf(stderr, "cannot write %s\n", a.path.c_str()); return 1; }
 			int np = 0; const int16_t *pcm = dosdrv_audio(&np);
@@ -263,6 +282,17 @@ int main(int argc, char **argv) {
 		if (dumpPrefix && video) { char path[1024]; snprintf(path, sizeof path, "%s%05d.tga", dumpPrefix, fr); writeTga(path, video, w, h); }
 		for (auto &s2 : shots) if (s2.frame == fr && video) writeTga(s2.path.c_str(), video, w, h);
 		for (auto &m2 : mems) if (m2.frame == fr) { const char *dn; uint8_t *dd; uint64_t ds; bool dw; if (dosdrv_domain(m2.domain, &dn, &dd, &ds, &dw)) { writeWholeFile(m2.path, dd, (size_t)ds); fprintf(stderr, "domain %d %s: %llu bytes\n", m2.domain, dn, (unsigned long long)ds); } }
+		for (auto &v : vrams) if (v.frame == fr) {
+			FILE *f = fopen(v.path.c_str(), "wb");
+			if (f) {
+				const uint32_t n = (uint32_t)vga.mem.memsize;
+				fwrite(&n, 4, 1, f);
+				fwrite(vga.mem.linear, 1, n, f);
+				for (int k = 0; k < 256; k++) { uint8_t c[3] = { vga.dac.rgb[k].red, vga.dac.rgb[k].green, vga.dac.rgb[k].blue }; fwrite(c, 1, 3, f); }
+				fwrite(vga.attr.palette, 1, 16, f);
+				fclose(f);
+			}
+		}
 		for (auto &r : rams) if (r.frame == fr) {
 			const char *dn; uint8_t *dd; uint64_t ds; bool dw;
 			if (dosdrv_domain(0, &dn, &dd, &ds, &dw)) writeWholeFile(r.path, dd, (size_t)ds);
@@ -270,6 +300,7 @@ int main(int argc, char **argv) {
 		if (verbose && fr % 100 == 0) { fprintf(stderr, "frame %d instr=%llu ticks=%u\n", fr, (unsigned long long)tracer_instr_count(), dosdrv_ticks_elapsed()); }
 	}
 	if (traceFile) fclose(traceFile);
+	tracer_replay_close();
 	if (fmTrace) fclose(fmTrace);
 	if (ev) fclose(ev);
 	for (auto &a : audios) if (a.f) { fclose(a.f); fclose(a.idx); }
