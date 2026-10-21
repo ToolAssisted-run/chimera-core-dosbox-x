@@ -97,10 +97,10 @@ print('keyboard order verified against KBD_KEYS')
 # ---- the non-keyboard blocks, BizHawk's controller-definition order --------
 JOY = [(f'P{p} Joystick {b}', bind)
        for p, pad in ((1, 'J1'), (2, 'J2'))
-       for b, bind in (('Up', f'Up, {pad} POV1U, X1 DpadUp, X1 LStickUp' if p == 1 else ''),
-                       ('Down', f'Down, {pad} POV1D, X1 DpadDown, X1 LStickDown' if p == 1 else ''),
-                       ('Left', f'Left, {pad} POV1L, X1 DpadLeft, X1 LStickLeft' if p == 1 else ''),
-                       ('Right', f'Right, {pad} POV1R, X1 DpadRight, X1 LStickRight' if p == 1 else ''),
+       for b, bind in (('Up', f'Up, {pad} POV0U, X1 DpadUp, X1 LStickUp' if p == 1 else ''),
+                       ('Down', f'Down, {pad} POV0D, X1 DpadDown, X1 LStickDown' if p == 1 else ''),
+                       ('Left', f'Left, {pad} POV0L, X1 DpadLeft, X1 LStickLeft' if p == 1 else ''),
+                       ('Right', f'Right, {pad} POV0R, X1 DpadRight, X1 LStickRight' if p == 1 else ''),
                        ('Button 1', 'Z, J1 B1, X1 X' if p == 1 else ''),
                        ('Button 2', 'X, J1 B2, X1 A' if p == 1 else ''))]
 # Mouse Set Position is what makes Mouse Position X/Y apply: held, the pointer
