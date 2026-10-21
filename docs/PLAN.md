@@ -1044,3 +1044,20 @@ the interpreter's, which is how the setting is seen to reach the machine. By
 hand, the native build and the sandbox give the same digests on it too. Not
 measured: another computer, and a program that works the processor hard
 enough to show the speed (at the DOS prompt the two take the same time).
+
+## The keyboard in rows (2026-10-21, chimera#337)
+
+The 102 keys were listed in DOSBox-X's own KBD_KEYS order (the digits, the
+letters, the F keys, then the rest), which BizHawk's integration also used.
+They are now listed as they sit on a PC keyboard, row by row from the top
+(Escape, the F keys, Print Screen, Scroll Lock and Pause; the number row; the
+QWERTY row; the home row; the Z row with the extra <> key beside Left Shift;
+the bottom row), then the navigation keys, the arrows and the keypad. The
+wire still carries KBD_KEYS values: `gen-config.py` writes `key-order.h`,
+which maps a key's place in the list to its value for the core
+(`kListedKbd`) and back for the sandbox runner's typing (`kKbdListed`). A
+project made before keeps its own column order and is read by its key names.
+
+Measured: the gate passes, 36 of 36, including the tests that type DOS
+commands through the sandbox's SetButton and compare with the native run,
+which presses KBD values directly; the frontend tests pass, 4 of 4.

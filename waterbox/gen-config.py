@@ -9,11 +9,12 @@ same axes, the same sync settings with the same defaults, and the same
 default host bindings.
 
 The button order IS the wire format: joysticks, mouse buttons, disk-swap
-controls, then the 102-key keyboard (config index 21+i maps to KBD value
-i+1 in the guest's SetButton export). The keyboard list mirrors BizHawk's
-DOSBoxKeyboard enum, which is KBD_KEYS order - verified below against the
-real enum in extern/dosbox-x/include/keyboard.h. Regenerate only with a
-matching guest change; run from waterbox/: python3 gen-config.py
+controls, then the 102-key keyboard. The keys are listed as they sit on the
+keyboard (chimera#337), and key-order.h, written here, maps a key's place in
+the list to its KBD value for the guest's SetButton export. KEYS below is
+KBD_KEYS order (BizHawk's DOSBoxKeyboard enum) - verified against the real
+enum in extern/dosbox-x/include/keyboard.h. Regenerate only with a matching
+guest change; run from waterbox/: python3 gen-config.py
 """
 import json
 import os
@@ -94,6 +95,27 @@ for i, (tok, _, _) in enumerate(KEYS):
     assert enum[i + 1] == tok, f'order mismatch at {i}: {enum[i+1]} != {tok}'
 print('keyboard order verified against KBD_KEYS')
 
+# ---- the keyboard as it sits on the keyboard (chimera#337) ------------------
+# The panel lists the keys row by row from the top, then the keys beside the
+# rows, the arrows and the keypad, rather than in KBD_KEYS order. The wire
+# keeps KBD_KEYS values: key-order.h, written below, maps a key's place in the
+# list to its KBD value for the core, and back for the test harness.
+ROWS = [
+    ['Escape'] + [f'F{i}' for i in range(1, 13)] + ['PrintScreen', 'ScrollLock', 'Pause'],
+    ['Grave', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 'Minus', 'Equals', 'Backspace'],
+    ['Tab', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 'LeftBracket', 'RightBracket', 'Backslash'],
+    ['CapsLock', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Semicolon', 'Quote', 'Enter'],
+    ['LeftShift', 'ExtraLtGt', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'Comma', 'Period', 'Slash', 'RightShift'],
+    ['LeftCtrl', 'LeftAlt', 'Space', 'RightAlt', 'RightCtrl'],
+    ['Insert', 'Home', 'Pageup', 'Delete', 'End', 'Pagedown'],
+    ['Up', 'Left', 'Down', 'Right'],
+    ['NumLock', 'KeyPadDivide', 'KeyPadMultiply', 'KeyPadMinus', 'KeyPad7', 'KeyPad8', 'KeyPad9', 'KeyPadPlus',
+     'KeyPad4', 'KeyPad5', 'KeyPad6', 'KeyPad1', 'KeyPad2', 'KeyPad3', 'KeyPadEnter', 'KeyPad0', 'KeyPadPeriod'],
+]
+by_name = {name: (i, tok, name, bind) for i, (tok, name, bind) in enumerate(KEYS)}
+LISTED = [by_name['Key ' + k] for row in ROWS for k in row]
+assert sorted(n for _, _, n, _ in LISTED) == sorted(n for _, n, _ in KEYS), 'the rows are not the 102 keys'
+
 # ---- the non-keyboard blocks, BizHawk's controller-definition order --------
 JOY = [(f'P{p} Joystick {b}', bind)
        for p, pad in ((1, 'J1'), (2, 'J2'))
@@ -113,7 +135,7 @@ SWAP = [('Previous Floppy Disk', ''), ('Next Floppy Disk', ''), ('Swap Floppy Di
         ('Previous CDROM', ''), ('Next CDROM', ''), ('Swap CDROM', '')]
 
 buttons = [n for n, _ in JOY] + [n for n, _ in MOUSE_BTNS] + [n for n, _ in SWAP] \
-    + [name for _, name, _ in KEYS]
+    + [name for _, _, name, _ in LISTED]
 assert len(buttons) == 124, len(buttons)
 
 # An absolute position on the guest's screen is 0..65535 with neutral 32768 on
@@ -419,7 +441,7 @@ config = {
     "audio": {"samplesPerFrame": 8192, "channels": 2, "get": "GetAudio"},
     "input": {
         "name": "DOSBox Controller",
-        "_comment": "index order is the wire format, imported from BizHawk's controller definition: joysticks, mouse buttons, disk-swap controls, then the 102-key keyboard (KBD_KEYS 1..102, see gen-config.py). Wider than 64, so everything rides the SetButton channel.",
+        "_comment": "index order is the wire format, imported from BizHawk's controller definition: joysticks, mouse buttons, disk-swap controls, then the 102-key keyboard, listed as it sits on the keyboard (each key's KBD_KEYS value is in key-order.h, see gen-config.py). Wider than 64, so everything rides the SetButton channel.",
         "buttons": buttons,
         "mnemonics": mnemonics_for(buttons),
         "axes": with_headers(axes),
@@ -765,7 +787,7 @@ with open(os.path.join(HERE, 'waterbox.config'), 'w') as f:
 binds = {n: b for n, b in JOY}
 binds.update({n: b for n, b in MOUSE_BTNS})
 binds.update({n: b for n, b in SWAP})
-binds.update({name: bind for _, name, bind in KEYS})
+binds.update({name: bind for _, _, name, bind in LISTED})
 analog = {
     "Mouse Position X": {"Value": "WMouse X", "Mult": 1.0, "Deadzone": 0.0},
     "Mouse Position Y": {"Value": "WMouse Y", "Mult": 1.0, "Deadzone": 0.0},
@@ -787,6 +809,23 @@ keybinds = {
 with open(os.path.join(HERE, 'default_keybinds.json'), 'w') as f:
     json.dump(keybinds, f, indent=2)
     f.write('\n')
+
+# the keyboard's list places and KBD_KEYS values, both ways (chimera#337)
+def c_list(values):
+    rows = [', '.join(str(v) for v in values[i:i + 16]) for i in range(0, len(values), 16)]
+    return '{\n\t' + ',\n\t'.join(rows) + ',\n}'
+kbd_of_place = [i + 1 for i, _, _, _ in LISTED]
+place_of_kbd = [-1] + [kbd_of_place.index(v) for v in range(1, 103)]
+with open(os.path.join(HERE, 'key-order.h'), 'w') as f:
+    f.write('/* key-order.h - written by gen-config.py; do not edit.\n'
+            ' * The keyboard\'s keys are listed as they sit on the keyboard, row by row\n'
+            ' * from the top, then the keys beside the rows, the arrows and the keypad\n'
+            ' * (chimera#337). kListedKbd[i] is the KBD_KEYS value of the key in place i\n'
+            ' * of the list; kKbdListed[k] is the place of KBD_KEYS value k (KBD_NONE has\n'
+            ' * none, -1). */\n'
+            '#pragma once\n'
+            f'static const int kListedKbd[{len(kbd_of_place)}] = {c_list(kbd_of_place)};\n'
+            f'static const int kKbdListed[{len(place_of_kbd)}] = {c_list(place_of_kbd)};\n')
 
 print(f'waterbox.config: {len(buttons)} buttons, {len(axes)} axes')
 print('default_keybinds.json written')

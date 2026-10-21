@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 
 #include "exercise-input.h"
+#include "key-order.h"
 #include <keyboard.h> // KBD_* values; no other dosbox headers needed
 
 static bool writeTga(const char *path, const uint32_t *bgra, int w, int h)
@@ -358,13 +359,14 @@ int main(int argc, char **argv)
 		}
 
 		// typing through the WIDE-INPUT export, in lockstep with run-native:
-		// config button index = EX_BTN_KEYS + KBD value - 1 (gen-config.py)
+		// config button index = EX_BTN_KEYS + the key's place in the list
+		// (key-order.h, written by gen-config.py)
 		int key = -1, shift = 0;
 		if (typeText && i >= 140 && typeText[typePos] != '\0') {
 			bool sh = false;
 			KBD_KEYS k = keyForChar(typeText[typePos], &sh);
 			if (typePhase < 2) {
-				if (k != KBD_NONE) key = EX_BTN_KEYS + (int)k - 1;
+				if (k != KBD_NONE) key = EX_BTN_KEYS + kKbdListed[(int)k];
 				if (sh) shift = 1;
 			}
 			if (++typePhase == 4) { typePhase = 0; typePos++; }
@@ -375,7 +377,7 @@ int main(int argc, char **argv)
 			prevKey = key;
 		}
 		if (shift != prevShift) {
-			SetButton(EX_BTN_KEYS + (int)KBD_leftshift - 1, shift);
+			SetButton(EX_BTN_KEYS + kKbdListed[(int)KBD_leftshift], shift);
 			prevShift = shift;
 		}
 

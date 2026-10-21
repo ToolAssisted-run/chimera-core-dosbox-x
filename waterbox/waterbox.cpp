@@ -20,6 +20,7 @@
 #include <waterbox_slots.h>
 
 #include "dosbox-driver.h"
+#include "key-order.h"
 #include "waterbox-input.h"
 
 static char g_loadError[512];
@@ -439,10 +440,13 @@ ECL_EXPORT void FrameAdvance(uint64_t)
 {
 	if (!g_inited) return;
 
-	// keyboard block: config index BTN_KEYS+i = KBD value i+1
-	for (int i = 0; i < BTN_KEY_COUNT && i + 1 < WBX_KEY_COUNT; i++) {
-		if (g_buttons[BTN_KEYS + i] != 0) g_input.keys[i + 1] = 1;
-		else if (g_prevButtons[BTN_KEYS + i] != 0) g_input.keys[i + 1] = 0;
+	// keyboard block: config index BTN_KEYS+i is the key in place i of the
+	// list, KBD value kListedKbd[i] (key-order.h, chimera#337)
+	for (int i = 0; i < BTN_KEY_COUNT; i++) {
+		const int kbd = kListedKbd[i];
+		if (kbd >= WBX_KEY_COUNT) continue;
+		if (g_buttons[BTN_KEYS + i] != 0) g_input.keys[kbd] = 1;
+		else if (g_prevButtons[BTN_KEYS + i] != 0) g_input.keys[kbd] = 0;
 	}
 
 	auto joy = [](const uint8_t *b, const uint8_t *pb, WbxJoy &o) {
