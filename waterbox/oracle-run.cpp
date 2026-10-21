@@ -11,6 +11,8 @@
 // script lines (frames are 0-based; '#' comments):
 //   key F NAME 0|1          set key level from frame F on (NAME = KBD enum name without KBD_, e.g. leftshift, esc, up)
 //   ram F PATH              write the 640 KB conventional memory after frame F
+//   ramat POS PATH          (with --replay) the 640 KB to PATH after POS of the program's instructions, the replay
+//                           log's count (after an excursion's return, before an interrupt taken there)
 //   probe SEG OFF [label [PHYS LEN]]   record registers+stack whenever CS:IP == SEG:OFF (hex); PHYS/LEN (hex) add a memory sample
 //                           (PHYS "SSxxxx" = ss:sp+xxxx, "DSxxxx" = ds:xxxx)
 //   probe32 EIP label [PHYS LEN]   like probe, matching the full 32-bit EIP in any code segment (flat protected mode)
@@ -30,6 +32,8 @@
 //   mpos F X Y              the mouse driver's cursor put at X,Y (the program's virtual coordinates, as INT 33h reports
 //                           them: 0-639 x 0-199 in the 320-pixel modes) at frame F, within the program's range
 //   button F left|right|middle 0|1   press (1) or release (0) a mouse button on frame F
+//   joy F N X Y B           joystick N (1 or 2; needs --setting joystickNEnabled=true) from frame F on: X and Y -1, 0
+//                           or 1 (DOSBox-X's digital stick: left/up, centre, right/down), B its buttons (bit 0 the first)
 //   end F                   stop after frame F
 #include <cstdio>
 #include <cstdlib>
@@ -104,6 +108,7 @@ static int keyIndex(const std::string &n) {
 }
 
 struct KeyEv { int frame, key, level; };
+struct JoyEv { int frame, n, x, y, b; };
 struct MouseEv { int frame, kind, a, b; };   // kind 0 = absolute pos, 1 = relative, 2 = button (a = 0 left 1 right 2 middle, b = level), 3 = placed
 struct RamDump { int frame; std::string path; };
 struct TraceReq { int f1, f2; std::string path; };
@@ -140,6 +145,8 @@ int main(int argc, char **argv) {
 	struct AudioReq { int f1, f2; std::string path; FILE *f, *idx; }; std::vector<AudioReq> audios;
 	struct ProbePokeReq { std::string label; uint32_t hit, phys; std::vector<uint8_t> bytes; }; std::vector<ProbePokeReq> probePokes;
 	struct Probe32Req { uint32_t eip, phys, len; }; std::vector<Probe32Req> probes32; std::vector<std::string> probe32Labels;
+	std::vector<JoyEv> joyEvs;
+	std::vector<std::pair<unsigned long long, std::string>> ramAts;
 	std::vector<KeyEv> keys; std::vector<MouseEv> mouseEvs; std::vector<RamDump> rams; std::vector<TraceReq> traces; std::vector<InjectReq> injects; std::vector<PokeReq> pokes; std::vector<std::string> probeLabels, watchLabels;
 	std::vector<std::pair<uint16_t,uint16_t>> probes; std::vector<std::pair<uint32_t,uint32_t>> probeMem; std::vector<std::pair<uint32_t,uint32_t>> watches;
 	int endFrame = 600;
@@ -153,6 +160,7 @@ int main(int argc, char **argv) {
 			std::string cmd = a;
 			if (cmd == "key" && n >= 4) { int k = keyIndex(c); if (k < 0) { fprintf(stderr, "unknown key %s\n", c); return 2; } keys.push_back({atoi(b), k, atoi(d)}); }
 			else if (cmd == "ram" && n >= 3) rams.push_back({atoi(b), c});
+			else if (cmd == "ramat" && n >= 3) ramAts.push_back({strtoull(b, 0, 10), c});   // ramat POS PATH: the memory at the program's instruction count POS (with --replay)
 			else if (cmd == "probe" && n >= 3) { probes.push_back({(uint16_t)strtoul(b, 0, 16), (uint16_t)strtoul(c, 0, 16)}); probeLabels.push_back(n >= 4 ? d : ""); probeMem.push_back(n >= 6 ? std::make_pair(!strncmp(e5, "SS", 2) ? 0xFFFF0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : !strncmp(e5, "DS", 2) ? 0xFFFE0000u | (uint32_t)strtoul(e5 + 2, 0, 16) : (uint32_t)strtoul(e5, 0, 16), (uint32_t)strtoul(e6, 0, 16)) : std::make_pair(0u, 0u)); }
 			else if (cmd == "probe32" && n >= 3) { probes32.push_back({(uint32_t)strtoul(b, 0, 16), n >= 5 ? (uint32_t)strtoul(d, 0, 16) : 0u, n >= 5 ? (uint32_t)strtoul(e5, 0, 16) : 0u}); probe32Labels.push_back(c); }
 			else if (cmd == "watch" && n >= 3) { watches.push_back({(uint32_t)strtoul(b, 0, 16), (uint32_t)strtoul(c, 0, 16)}); watchLabels.push_back(n >= 4 ? d : ""); }
@@ -177,6 +185,7 @@ int main(int argc, char **argv) {
 			else if (cmd == "mouse" && n >= 4) mouseEvs.push_back({atoi(b), 0, atoi(c), atoi(d)});
 			else if (cmd == "mrel" && n >= 4) mouseEvs.push_back({atoi(b), 1, atoi(c), atoi(d)});
 			else if (cmd == "mpos" && n >= 4) mouseEvs.push_back({atoi(b), 3, atoi(c), atoi(d)});
+			else if (cmd == "joy" && n >= 6) joyEvs.push_back({atoi(b), atoi(c), atoi(d), atoi(e5), atoi(e6)});
 			else if (cmd == "button" && n >= 4) mouseEvs.push_back({atoi(b), 2, !strcmp(c, "left") ? 0 : !strcmp(c, "right") ? 1 : 2, atoi(d)});
 			else if (cmd == "end" && n >= 2) endFrame = atoi(b);
 			else { fprintf(stderr, "bad script line: %s", line); return 2; }
@@ -186,7 +195,7 @@ int main(int argc, char **argv) {
 
 	// ---- stage machine (as run-native) ----
 	mkdir(workdir, 0777);
-	DosDrvConfig cfg; cfg.joystick1Enabled = false; cfg.joystick2Enabled = false;
+	DosDrvConfig cfg; cfg.joystick1Enabled = m.joystick1; cfg.joystick2Enabled = m.joystick2;   // (--setting joystickNEnabled=true: the joy command's sticks)
 	{
 		std::string romExt; const char *dot = strrchr(rom, '.');
 		if (dot) { romExt = dot; for (char &ch : romExt) ch = (char)tolower((unsigned char)ch); }
@@ -207,6 +216,7 @@ int main(int argc, char **argv) {
 	if (replayPath) {
 		std::string rp = replayPath[0] == '/' ? std::string(replayPath) : std::string(replayPath);
 		tracer_replay_open(rp.c_str(), progLo, progHi);
+		for (auto &r : ramAts) tracer_replay_ram_at(r.first, r.second.c_str());
 	}
 	for (size_t i = 0; i < probes.size(); i++) { if (probeMem[i].second) tracer_add_probe_mem(probes[i].first, probes[i].second, probeMem[i].first, probeMem[i].second); else tracer_add_probe(probes[i].first, probes[i].second); }
 	for (const auto &pp : probePokes) {
@@ -223,6 +233,11 @@ int main(int argc, char **argv) {
 	FILE *traceFile = nullptr;
 	for (int fr = 0; fr <= endFrame; fr++) {
 		for (auto &k : keys) if (k.frame == fr) in.keys[k.key] = (uint8_t)k.level;
+		for (auto &j : joyEvs) if (j.frame == fr) {
+			DosDrvJoystick &s2 = j.n == 2 ? in.joy2 : in.joy1;
+			s2.left = j.x < 0; s2.right = j.x > 0; s2.up = j.y < 0; s2.down = j.y > 0;
+			s2.button1 = (j.b & 1) != 0; s2.button2 = (j.b & 2) != 0;
+		}
 		in.mouse.speedX = in.mouse.speedY = 0;
 		in.mouse.leftPressed = in.mouse.rightPressed = in.mouse.middlePressed = false;
 		in.mouse.leftReleased = in.mouse.rightReleased = in.mouse.middleReleased = false;

@@ -71,6 +71,7 @@ void tracer_probe_poke(int probe, uint32_t hit, uint32_t phys, const uint8_t *da
 void tracer_replay_open(const char *path, uint16_t lo, uint16_t hi);
 void tracer_replay_close();
 void tracer_replay_frame(int frame);
+void tracer_replay_ram_at(uint64_t pos, const char *path);           // the 640 KB after the program's instruction POS (its next instruction's or an interrupt's count)
 uint64_t tracer_prog_count();
 void tracer_irq(unsigned vector);                                      // pic.cpp: a hardware interrupt is about to be taken
 void tracer_port_read(unsigned port, unsigned width, uint32_t value);  // iohandler.cpp: a port read

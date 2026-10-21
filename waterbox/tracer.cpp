@@ -1,5 +1,6 @@
 #include "tracer.h"
 #include <vector>
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <cstdio>
@@ -47,6 +48,23 @@ static void log_regs(char kind) {
 	fprintf(rlog, "%c %llu %04X:%04X ax=%04X bx=%04X cx=%04X dx=%04X si=%04X di=%04X bp=%04X sp=%04X ds=%04X es=%04X ss=%04X fl=%04X\n", kind, (unsigned long long)progCount,
 		r.cs, r.eip & 0xFFFF, r.eax & 0xFFFF, r.ebx & 0xFFFF, r.ecx & 0xFFFF, r.edx & 0xFFFF, r.esi & 0xFFFF, r.edi & 0xFFFF, r.ebp & 0xFFFF, r.esp & 0xFFFF, r.ds, r.es, r.ss, r.eflags & 0xFFFF);
 }
+// memory dumps at the program's instruction counts (a replay's): the 640 KB as the program finds it after POS of its
+// instructions (after the excursion of the last of them, before an interrupt taken there): the first of the
+// program's next instruction or an interrupt taken in the program at that count
+static std::vector<std::pair<uint64_t, std::string>> ramAt; static size_t ramAtNext = 0;
+void tracer_replay_ram_at(uint64_t pos, const char *path) {
+	ramAt.push_back({pos, path});
+	std::stable_sort(ramAt.begin(), ramAt.end(), [](const std::pair<uint64_t, std::string> &a, const std::pair<uint64_t, std::string> &b) { return a.first < b.first; });
+}
+static void ram_at_check() {
+	while (ramAtNext < ramAt.size() && ramAt[ramAtNext].first <= progCount) {
+		if (ramAt[ramAtNext].first == progCount) {
+			FILE *f = fopen(ramAt[ramAtNext].second.c_str(), "wb");
+			if (f) { for (uint32_t a = 0; a < 0xA0000; a++) fputc(phys_readb(a), f); fclose(f); }
+		}
+		ramAtNext++;
+	}
+}
 // a path ending in .zst is written through zstd
 void tracer_replay_open(const char *path, uint16_t lo, uint16_t hi) {
 	size_t n = strlen(path);
@@ -83,6 +101,7 @@ void tracer_irq(unsigned vector) {
 	if (!rlog) return;
 	// the side of the line where the interrupt finds the program (the last instruction may have crossed it)
 	replay_sync(SegValue(cs), (uint16_t)reg_eip);
+	if (inProg) ram_at_check();
 	pr_flush();
 	TracerRegs r; tracer_read_regs(&r);
 	// (then the other registers: the replay checks them where the program was, and runs a handler of an interrupt
@@ -157,7 +176,7 @@ void tracer_hook() {
 		if (p && progCount == 0) replay_start_state();
 		if (p) {
 			if (repRestart && curCs == repCs && curIp == repIp) repRestart = false;   // (a string op resuming: counted when it began)
-			else progCount++;
+			else { ram_at_check(); progCount++; }   // (a dump not at a resumption: where the core broke the string op is its own)
 		}
 	}
 	if (injState == 1 && curCs == injWhenCs && curIp == injWhenIp) {
