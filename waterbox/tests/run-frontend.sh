@@ -94,13 +94,28 @@ run_frontend() {
 	} > "$job"
 	rm -f "$work/$tag.ram.bin" "$work/$tag.meta.txt"
 	[ -n "$shot" ] && rm -f "$shot"
+	local project
+	project="$(game_project "$tag" "$cfg" "$package" "$work/testdisk.hdd")" || { echo "no project made (see tests/work/project.$tag/make.log)" > "$work/$tag.log"; return 1; }
 	( cd "$chimera_root" && MINIHAWK_JOB="$job" timeout 900 mono "$emu_exe" --headless \
 		"--config=$cfg" "--core=$package" \
-		"--lua=$here/frontend-ram.lua" "$work/testdisk.hdd" ) > "$work/$tag.log" 2>&1
+		"--lua=$here/frontend-ram.lua" "--project=$project" ) > "$work/$tag.log" 2>&1
 	[ -f "$work/$tag.meta.txt" ] && grep -q "^status=OK" "$work/$tag.meta.txt"
 }
 
-settings_config() { python3 "$here/settings-config.py" "$config" "$1" "$2"; }
+# A game runs only in a project (Chimera, 2026-10-26): each run opens one made
+# of its game with chimera-run --new-project, holding the settings
+# settings_config was given for the config it runs with.
+declare -A settings_of
+settings_config() { python3 "$here/settings-config.py" "$config" "$1" "$2"; settings_of["$1"]="$2"; }
+crun="$chimera_root/build/dll/chimera-run"
+game_project() { # tag, config, package, game: prints the project's path
+	local dir="$work/project.$1" settings="${settings_of[$2]:-}"
+	local pkg="$3" game="$4"
+	local fw=()
+	rm -rf "$dir" && mkdir -p "$dir" && cp "$game" "$dir/"
+	"$crun" --new-project "$dir/$1.chimeraProject" "$pkg" "$dir/$(basename "$game")" \
+		--settings "${settings:-"{}"}" "${fw[@]}" > "$dir/make.log" 2>&1 && echo "$dir/$1.chimeraProject"
+}
 
 # --- the machine the frontend builds must be the one the gate signed off on ---
 settings_config "$work/config.base.ini" '{}'
@@ -171,8 +186,11 @@ import sys
 entry = "|32768,32768,    0,    0," + "." * 112 + "|" + "." * 6 + "|" + "." * 6 + "|"
 open(sys.argv[1], "w").write((entry + "\n") * 300)
 PYMOVIE
+	# a game runs only in a project (Chimera, 2026-10-26): one of the disk and that movie
+	( cd "$chimera_root" && LD_LIBRARY_PATH="$chimera_root/build/dll" "$crun" --new-project "$work/sd.chimeraProject" \
+		"$package" "$work/testdisk.hdd" "$work/sd.movie.txt" ) > "$work/sd.make.log" 2>&1
 	( cd "$chimera_root" && LD_LIBRARY_PATH="$chimera_root/build/dll" timeout 900 "$crun" \
-		"$package" "$work/testdisk.hdd" "$work/sd.movie.txt" --export-savedata "$work/sd.engine" ) \
+		--project "$work/sd.chimeraProject" "$package" --files "$work" --export-savedata "$work/sd.engine" ) \
 		> "$work/sd.engine.log" 2>&1
 	LD_LIBRARY_PATH="" timeout 900 "$rw" "$core" --rom "$work/testdisk.hdd" --frames 300 \
 		--savedata-out "$work/sd.box" > "$work/sd.box.log" 2>&1
