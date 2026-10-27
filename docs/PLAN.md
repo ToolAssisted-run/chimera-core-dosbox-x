@@ -1061,3 +1061,28 @@ project made before keeps its own column order and is read by its key names.
 Measured: the gate passes, 36 of 36, including the tests that type DOS
 commands through the sandbox's SetButton and compare with the native run,
 which presses KBD values directly; the frontend tests pass, 4 of 4.
+
+## PC-98 colour levels and underline (2026-10-27, chimera#374)
+
+Two faults of DOSBox-X's own PC-98 drawing, reported with test disks of
+the reporter's:
+
+- **16-colour levels.** A PC-98 colour has 16 levels, level N being N * 17
+  on 0 to 255. DOSBox-X went from 4 bits to 6 and from 6 to 8, which made
+  level 7 into 117 and 12 into 207. The 16-colour palette now goes straight
+  to 8 bits (`dac_4to8` in `patches/include/pc98_dac.h`, used in
+  `patches/src/hardware/vga_pc98_dac.cpp` and `vga_pc98_gdc.cpp`), as the
+  256-colour palette already did.
+- **Underline in 20-line text.** The underline was drawn on the VGA's last
+  scan line of a 16-line cell, so in 20-line text it landed every 16 lines,
+  through the letters of most rows. It is now drawn on the character row's
+  last line (`patches/src/hardware/vga_draw.cpp`), which is where Neko
+  Project II draws it. 25-line text is unchanged (line 15 either way).
+
+Measured with the native runner on the PC-9821 machine and the reporter's
+disks: the grey bars went from 0, 16, 32, 48, 69, ... to 0, 17, 34, 51,
+68, ... 255. The fully underlined screen's lines went from rows 15, 31, 63,
+79, ... (every 16) to rows 19, 39, 79, 99, ... (each 20-line row's last).
+The gate (36/0) and the window tests (4/0) pass. No test of the core checks
+PC-98 drawing; these were measured by hand.
+

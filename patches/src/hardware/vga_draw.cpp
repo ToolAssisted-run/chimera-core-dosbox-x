@@ -3511,8 +3511,11 @@ interrupted_char_begin:
             /* "vertical line" bit puts a vertical line on the 4th pixel of the cell */
             if (!pc98_attr4_graphic && (attr & 0x10)) lineoverlay |= 1U << 7U;
 
-            /* underline fills the row to underline the text */
-            if ((attr & 0x08) && line == (vga.crtc.maximum_scan_line & 0x1FU)) lineoverlay |= 0xFFU;
+            /* underline fills the row to underline the text, on the character
+             * row's last line (Chimera, chimera#374: the VGA's scan line count
+             * placed it every 16 lines, through 20-line text; Neko Project II
+             * draws it on the row's last line too) */
+            if ((attr & 0x08) && fline == pc98_text_first_row_scanline_end) lineoverlay |= 0xFFU;
 
             /* lineoverlay overlays font with 4-pixel delay */
             font |= (unsigned char)(((unsigned int)lineoverlay >> 4u) & 0xFFU);
