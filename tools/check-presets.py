@@ -13,8 +13,7 @@ This runs in the gate and in build-package.sh, and its negative control is in
 the gate's own preset legs (break a value, watch it go red).
 
 What it enforces, all of it from chimera docs/project.md, "Configuration
-presets", and source/gui/Chimera.Emulation.Common/Waterbox/WaterboxConfig.cs
-(PresetDecl, SettingDecl.Coerce):
+presets":
 
   - every preset has a unique, non-empty id
   - every preset has a label and a description (the selector shows the label;
@@ -84,8 +83,8 @@ def main():
     presets = cfg.get("presets", [])
     decls = {s["name"]: s for s in cfg.get("settings", []) if "name" in s}
     machine_setting = cfg.get("machineSetting")
-    # PresetDecl.When is compared against the machine's own first "when" value,
-    # falling back to its id (WaterboxConfig.PresetsFor).
+    # a preset's "when" is compared against the machine's own first "when"
+    # value, falling back to its id.
     machine_values = [(m["when"][0] if m.get("when") else m.get("id"))
                       for m in cfg.get("machines", [])]
     bad = []
