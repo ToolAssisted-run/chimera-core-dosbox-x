@@ -26,15 +26,10 @@ Commands run from the root of this repository unless a step says otherwise.
   sudo apt-get install -y --no-install-recommends meson ninja-build build-essential cmake pkg-config python3
   ```
 
-- To build Chimera and run the frontend gate and the contract tests, CI adds:
-
-  ```sh
-  sudo apt-get install -y --no-install-recommends mono-complete xvfb libgl1-mesa-dev libx11-dev libxext-dev libasound2-dev
-  ```
-
-  and the .NET SDK 8.0. The workflow uses `actions/setup-dotnet@v4` with
-  `dotnet-version: '8.0'`. By hand, Chimera's README gives
-  `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0`.
+- To build Chimera with its window, and run the frontend gate and the
+  contract tests, CI runs Chimera's `tools/ci-chimera.sh`. It installs what
+  that needs (Qt 6.12, from Qt's own archives with aqt) and builds it; the
+  workflow keeps Qt in `~/qt` between runs.
 - `waterbox/tests/run-frontend.sh` also calls `zstd`. The workflow does not
   install it, so check the command exists.
 - The workflow pins no compiler version: it uses the gcc that
@@ -203,12 +198,12 @@ gets there as a file.
 
 - In a Chimera SOURCE checkout the cores folder is `<chimera>/build/Cores/`.
   `build-package.sh -r <chimera>` has already written
-  `dosbox-x.chimeraCore` there. Start Chimera with `build/ChimeraMono.sh` on
-  Linux or `build\Chimera.exe` on Windows.
-- In a release bundle, copy the `.chimeraCore` file into the `Cores` folder
-  beside `Chimera.exe`, or into the folder chosen in
-  File > Core Manager > Change folder...
-- File > Core Manager lists what is in the folder. Refresh List rescans it.
+  `dosbox-x.chimeraCore` there. Start Chimera with
+  `build/meson-linux/source/ui/chimera` on Linux.
+- In a release bundle, copy the `.chimeraCore` file into the `cores` folder
+  beside Chimera's program, or into the folder chosen in
+  Tools > Core Manager... > Change folder...
+- Tools > Core Manager... lists what is in the folder. Refresh List rescans it.
 
 The same package file works on Linux and on Windows: Chimera's sandbox
 (miniBox) runs the guest inside it on either.
@@ -269,10 +264,7 @@ The package inside the real frontend. Build Chimera first (in `<chimera>`,
 the workflow's commands):
 
 ```sh
-meson setup build/meson-linux --prefix "$PWD/build" --libdir dll
-meson compile -C build/meson-linux
-meson install -C build/meson-linux
-dotnet build source/gui/Chimera.sln -c Release /nodeReuse:false -p:UseSharedCompilation=false
+tools/ci-chimera.sh
 ```
 
 Then, from this repository, with the package installed:
@@ -283,10 +275,9 @@ Then, from this repository, with the package installed:
 
 Options: `--chimera-root <path>` and `--frames <N>` (default 300).
 
-It needs `<chimera>/build/Chimera.exe`, the package at
+It needs Chimera's window, `<chimera>/build/meson-linux/source/ui/chimera`, the package at
 `<chimera>/build/Cores/dosbox-x.chimeraCore`, `run-native` and `run-wbx`,
-`mono`, `zstd`, and `Xvfb` when `DISPLAY` is not set (it starts a private
-display). It needs no content: it boots the blank formatted hard disk kept in
+and `zstd`. No display is needed: the window runs headless. It needs no content: it boots the blank formatted hard disk kept in
 `waterbox/hdd/`.
 
 Its checks are `hdd:frontend` (RAM identical to the native reference),
@@ -302,10 +293,7 @@ built for a guest ABI this frontend runs, a working factory, binding only
 declared buttons, stamping a version. In `<chimera>`:
 
 ```sh
-CHIMERA_CORES_DIR=<chimera>/build/Cores \
-dotnet test source/gui/Chimera.Tests.Client.Common/Chimera.Tests.Client.Common.csproj \
-  -c Release --nologo \
-  --filter "FullyQualifiedName~InstalledCorePackagesTests|FullyQualifiedName~MnemonicUniquenessTests"
+CHIMERA_CORES_DIR=<chimera>/build/Cores <chimera>/build/meson-linux/source/ui/test-packages
 ```
 
 ### Local images (not in CI)
@@ -365,5 +353,5 @@ Nothing licensed is in this repository or in the package. The user provides:
 - The cross file names the guest C++ headers by the host gcc's version
   (`gcc -dumpfullversion`). Build miniBox's guest toolchain and the core with
   the same gcc.
-- `Xvfb not found`, `Chimera not built: ...`, `package not installed: ...`
-  (`run-frontend.sh`): install `xvfb`, build Chimera, run `build-package.sh`.
+- `Chimera not built: ...`, `package not installed: ...`
+  (`run-frontend.sh`): build Chimera, run `build-package.sh`.

@@ -4,7 +4,7 @@ This repository builds the DOSBox-X DOS/PC emulator as a sandboxed guest for
 Chimera (https://github.com/ToolAssisted-run/chimera), a frontend for
 tool-assisted speedruns. It produces one file, `dosbox-x.chimeraCore`: the
 guest binary `core.wbx` plus the declarations Chimera reads. Chimera ships no
-cores and downloads nothing; a user puts that file in Chimera's `Cores`
+cores and downloads nothing; a user puts that file in Chimera's `cores`
 folder. `docs/BUILDING.md` has the detail behind every command here.
 
 ## Layout
@@ -55,7 +55,7 @@ meson compile -C "$MB/build/meson-linux"
 meson compile -C "$MB/build/meson-cpp"
 ```
 
-The frontend gate needs more (Chimera built, mono, xvfb, .NET SDK 8.0): see
+The frontend gate needs more (Chimera built with its window; no display is needed): see
 `docs/BUILDING.md`.
 
 ## Build
@@ -82,8 +82,8 @@ ninja -C build/meson-guest
 
 `build-package.sh -r "$CHIMERA"` already put the package in
 `$CHIMERA/build/Cores/`, the cores folder of a source checkout. For a release
-bundle, copy the `.chimeraCore` file into the `Cores` folder beside
-`Chimera.exe` (or the folder set in File > Core Manager > Change folder...);
+bundle, copy the `.chimeraCore` file into the `cores` folder beside
+Chimera's program (or the folder set in Tools > Core Manager... > Change folder...);
 Refresh List rescans. The same file works on Linux and on Windows.
 
 A package built by hand stamps `<commit>+local` (`-dirty+local` when the tree
