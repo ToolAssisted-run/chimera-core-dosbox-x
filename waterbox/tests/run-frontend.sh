@@ -1,6 +1,6 @@
 #!/bin/bash
-# The frontend half of the gate: load the DOSBox-X package in Chimera (under
-# Mono, on a private Xvfb display), boot a hard-disk image for a fixed number
+# The frontend half of the gate: load the DOSBox-X package in Chimera's window
+# (run headless: it needs no display), boot a hard-disk image for a fixed number
 # of frames with nothing pressed, and require a slice of Conventional Memory
 # to be byte-identical to the native reference. Then prove a machine-shaping
 # sync setting arrives, the package's keybinds become the defaults, and the
@@ -33,12 +33,12 @@ fi
 	echo "chimera checkout not found; pass --chimera-root <path>" >&2; exit 1; }
 chimera_root="$(cd "$chimera_root" && pwd)"
 
-emu_exe="$chimera_root/build/Chimera.exe"
+chimera_exe="$chimera_root/build/meson-linux/source/ui/chimera"
 package="$chimera_root/build/Cores/dosbox-x.chimeraCore"
 rn="$root/build/meson-native/run-native"
 rw="$root/build/meson-native/run-wbx"
 core="$root/build/meson-guest/core.wbx"
-[ -f "$emu_exe" ] || { echo "Chimera not built: $emu_exe" >&2; exit 1; }
+[ -x "$chimera_exe" ] || { echo "Chimera not built: $chimera_exe" >&2; exit 1; }
 [ -f "$package" ] || { echo "package not installed: $package (run ../build-package.sh)" >&2; exit 1; }
 [ -x "$rn" ] || { echo "native reference not built" >&2; exit 1; }
 
@@ -53,29 +53,11 @@ if [ ! -s "$work/testdisk.hdd" ]; then
 fi
 [ -s "$work/testdisk.hdd" ] || { echo "could not build the test disk" >&2; exit 1; }
 
-export LD_LIBRARY_PATH="$chimera_root/build/dll:$chimera_root/build:/usr/lib/x86_64-linux-gnu"
-export MONO_CRASH_NOFILE=1 MONO_WINFORMS_XIM_STYLE=disabled ALSOFT_DRIVERS=null
-xvfb_pid=""
-cleanup() { [ -n "$xvfb_pid" ] && kill "$xvfb_pid" 2>/dev/null; }
-trap cleanup EXIT
-if [ -z "${DISPLAY:-}" ]; then
-	command -v Xvfb >/dev/null || { echo "Xvfb not found (apt install xvfb)" >&2; exit 1; }
-	for n in 90 91 92 93 94 95 96; do
-		if [ ! -e "/tmp/.X11-unix/X$n" ]; then
-			Xvfb ":$n" -screen 0 640x480x24 -nolisten tcp & xvfb_pid=$!
-			export DISPLAY=":$n"; break
-		fi
-	done
-	sleep 1
-fi
-
-config="$work/config.ini"
-if [ ! -f "$config" ]; then
-	( cd "$chimera_root" && timeout 120 mono "$emu_exe" --headless "--config=$config" \
-		"--lua=$here/exit.lua" ) > "$work/bootstrap.log" 2>&1
-	[ -f "$config" ] || { echo "config bootstrap failed (see $work/bootstrap.log)" >&2; exit 1; }
-fi
-sed -i 's/"DispMethod": [0-9]/"DispMethod": 1/' "$config"
+# Chimera's window, run headless: the cores installed in the checkout, its
+# settings, cache and recovery files the run's own, and nothing carried over
+# from a Chimera installed on this machine
+export ALSOFT_DRIVERS=null CHIMERA_CORES_DIR="$chimera_root/build/Cores" CHIMERA_QT_CACHE="$work/qt-cache" CHIMERA_QT_RECOVERY="$work/qt-recovery" \
+	CHIMERA_QT_HASHES="$work/qt-file-hashes.txt" CHIMERA_QT_CHIMERA_SETTINGS="$work/no-chimera-config.ini"
 
 ok=0
 failed=0
@@ -86,9 +68,11 @@ printf "%-28s %-9s %s\n" "-----" "------" "------"
 run_frontend() {
 	local tag="$1" cfg="$2" nframes="$3" shot="${4:-}"
 	local job="$work/job.$tag.txt"
+	local out="$work/$tag.ram.bin"
+	[ "${lua_script:-}" = dump-controls.lua ] && out="$work/$tag.controls.json"
 	{
 		echo "frames=$nframes"
-		echo "out=$work/$tag.ram.bin"
+		echo "out=$out"
 		echo "meta=$work/$tag.meta.txt"
 		echo "shot=$shot"
 	} > "$job"
@@ -96,9 +80,9 @@ run_frontend() {
 	[ -n "$shot" ] && rm -f "$shot"
 	local project
 	project="$(game_project "$tag" "$cfg" "$package" "$work/testdisk.hdd")" || { echo "no project made (see tests/work/project.$tag/make.log)" > "$work/$tag.log"; return 1; }
-	( cd "$chimera_root" && MINIHAWK_JOB="$job" timeout 900 mono "$emu_exe" --headless \
+	( cd "$chimera_root" && MINIHAWK_JOB="$job" timeout 900 "$chimera_exe" --headless \
 		"--config=$cfg" "--core=$package" \
-		"--lua=$here/frontend-ram.lua" "--project=$project" ) > "$work/$tag.log" 2>&1
+		"--lua=$here/${lua_script:-frontend-ram.lua}" "--project=$project" ) > "$work/$tag.log" 2>&1
 	[ -f "$work/$tag.meta.txt" ] && grep -q "^status=OK" "$work/$tag.meta.txt"
 }
 
@@ -106,7 +90,7 @@ run_frontend() {
 # of its game with chimera-run --new-project, holding the settings
 # settings_config was given for the config it runs with.
 declare -A settings_of
-settings_config() { python3 "$here/settings-config.py" "$config" "$1" "$2"; settings_of["$1"]="$2"; }
+settings_config() { python3 "$here/settings-config.py" "$1" "$2"; settings_of["$1"]="$2"; }
 crun="$chimera_root/build/dll/chimera-run"
 game_project() { # tag, config, package, game: prints the project's path
 	local dir="$work/project.$1" settings="${settings_of[$2]:-}"
@@ -118,13 +102,13 @@ game_project() { # tag, config, package, game: prints the project's path
 }
 
 # --- the machine the frontend builds must be the one the gate signed off on ---
-settings_config "$work/config.base.ini" '{}'
+settings_config "$work/settings.base.json" '{}'
 if ! "$rn" --workdir "$work/native" --rom "$work/testdisk.hdd" --frames "$frames" \
 	--ram-slice 0x0 0x10000 "$work/native.slice.bin" \
 	> "$work/native.txt" 2>"$work/native.err"; then
 	report "hdd:frontend" FAIL "native runner error: $(head -1 "$work/native.err")"
 else
-	if ! run_frontend "base" "$work/config.base.ini" "$frames" "$work/base.png"; then
+	if ! run_frontend "base" "$work/settings.base.json" "$frames" "$work/base.png"; then
 		report "hdd:frontend" FAIL "no OK meta (see tests/work/base.log)"
 	elif cmp -s "$work/native.slice.bin" "$work/base.ram.bin"; then
 		report "hdd:frontend" PASS "$frames frames, RAM slice identical to the native reference"
@@ -139,8 +123,8 @@ fi
 # declaration the wizard reads) - there is no preset setting for the guest to
 # resolve for itself any more, so what travels here is the settings themselves.
 python3 "$here/preset-settings.py" "$wb/waterbox.config" 1983_ibm_xt5160 > "$work/preset.json"
-settings_config "$work/config.cga.ini" "$(cat "$work/preset.json")"
-if run_frontend "cga" "$work/config.cga.ini" 60; then
+settings_config "$work/settings.cga.json" "$(cat "$work/preset.json")"
+if run_frontend "cga" "$work/settings.cga.json" 60; then
 	h1="$(grep '^ramhash=' "$work/base.meta.txt" | cut -d= -f2)"
 	h2="$(grep '^ramhash=' "$work/cga.meta.txt" | cut -d= -f2)"
 	if [ -n "$h2" ] && [ "$h1" != "$h2" ]; then
@@ -153,9 +137,13 @@ else
 fi
 
 # --- the bindings the package ships must become the frontend's defaults ---
-python3 "$here/forget-controller.py" "$work/config.base.ini" "$work/config.keys.ini" "DOSBox Controller"
-if run_frontend "keys" "$work/config.keys.ini" 1; then
-	if python3 "$here/check-keybinds.py" "$work/config.keys.ini" \
+# the keys the package ships are the machine's when nobody changed them (the
+# window keeps only the keys a person changed; fresh settings have none)
+lua_script=dump-controls.lua
+cp "$work/settings.base.json" "$work/settings.keys.json"
+if run_frontend "keys" "$work/settings.keys.json" 1; then
+	lua_script=
+	if python3 "$here/check-keybinds.py" "$work/keys.controls.json" \
 		"$wb/default_keybinds.json" "DOSBox Controller" > "$work/keys.txt" 2>&1; then
 		report "keybinds" PASS "$(cat "$work/keys.txt")"
 	else
