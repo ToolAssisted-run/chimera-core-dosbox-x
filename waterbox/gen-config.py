@@ -18,6 +18,31 @@ guest change; run from waterbox/: python3 gen-config.py
 """
 import json
 import os
+import re
+import sys
+
+# ---- the texts a person reads ----------------------------------------------
+# Every one is a key of languages/en.json (chimera docs/translations.md):
+# text() records the key's English and returns the key, each of its
+# arguments after it behind a 0x1F; write_texts() puts them in the table,
+# beside the keys the core's code names.
+TEXTS = {}
+
+
+def text(key, english, *args):
+    if TEXTS.setdefault(key, english) != english:
+        sys.exit("%s has two texts: %r and %r" % (key, TEXTS[key], english))
+    return "\x1f".join([key] + [str(a) for a in args])
+
+
+def write_texts(path):
+    table = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {"texts": {}}
+    table["texts"].update(TEXTS)
+    table["texts"] = dict(sorted(table["texts"].items()))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(table, f, indent="\t", ensure_ascii=False)
+        f.write("\n")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -199,7 +224,8 @@ def machine(id, label, description, **values):
     v.update(values)
     missing = [k for k in MACHINE_KEYS if k not in v]
     assert not missing, f'preset {id} does not say what its {missing} is'
-    return {"id": id, "label": label, "description": description, "values": v}
+    return {"id": id, "label": text("preset." + id, label), "description": text("preset." + id + ".about", description),
+            "values": v}
 
 PRESETS = [
     machine("1981_ibm_xt5150", "1981 IBM XT 5150",
@@ -299,8 +325,10 @@ DOS_VERSIONS = ["auto", "3.3", "5.0", "6.22", "7.0", "7.1"]
 # The hashes are munt's own (extern/dosbox-x/src/libs/mt32/ROMInfo.cpp): it
 # refuses a ROM it does not know, so a wrong dump is said here, not there.
 def FW(id, display, description, size, name, sha1, label, when):
-    e = {"id": id, "display": display, "description": description, "size": size,
-         "name": name, "label": label, "requiredWhen": when}
+    key = "firmware." + re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+    e = {"id": id, "display": text("firmware." + re.sub(r"[^a-z0-9]+", "_", display.lower()).strip("_"), display),
+         "description": text(key + ".about", description), "size": size, "name": name,
+         "label": text(key + ".label", label), "requiredWhen": when}
     if sha1: e["sha1"] = sha1
     return e
 
@@ -454,35 +482,35 @@ config = {
     "presets": PRESETS,
     "settings": [
         {
-            "name": "joystick1Enabled", "display": "Enable Joystick 1",
-            "description": "Whether a joystick is plugged into game port 1.",
+            "name": "joystick1Enabled", "display": text("setting.joystick1enabled", "Enable Joystick 1"),
+            "description": text("setting.joystick1enabled.about", "Whether a joystick is plugged into game port 1."),
             "type": "bool", "default": True, "sync": True
         },
         {
-            "name": "joystick2Enabled", "display": "Enable Joystick 2",
-            "description": "Whether a joystick is plugged into game port 2.",
+            "name": "joystick2Enabled", "display": text("setting.joystick2enabled", "Enable Joystick 2"),
+            "description": text("setting.joystick2enabled.about", "Whether a joystick is plugged into game port 2."),
             "type": "bool", "default": True, "sync": True
         },
         {
-            "name": "mouseEnabled", "display": "Enable Mouse",
-            "description": "Whether a mouse is plugged in.",
+            "name": "mouseEnabled", "display": text("setting.mouseenabled", "Enable Mouse"),
+            "description": text("setting.mouseenabled.about", "Whether a mouse is plugged in."),
             "type": "bool", "default": True, "sync": True
         },
         {
-            "name": "mouseSensitivity", "display": "Mouse Relative Sensitivity",
-            "description": "Every relative mouse movement is multiplied by this number "
+            "name": "mouseSensitivity", "display": text("setting.mousesensitivity", "Mouse Relative Sensitivity"),
+            "description": text("setting.mousesensitivity.about", "Every relative mouse movement is multiplied by this number "
                 "before the machine receives it. It applies to Mouse Speed "
                 "X/Y and to the movement that Mouse Set Position causes. It "
                 "changes how far the mouse has to travel, not where the "
                 "pointer ends: a position set with Mouse Set Position still "
                 "lands where it says. The value used to be 3.0 (the value in"
                 " the BizHawk version of this core), which moved the DOS "
-                "pointer about three times as far as asked.",
+                "pointer about three times as far as asked."),
             "type": "float", "default": 0.5, "sync": True
         },
         {
-            "name": "chimeraMouseDriver", "display": "Use Chimera Mouse Driver",
-            "description": "Lets Mouse Position (with Mouse Set Position held) place "
+            "name": "chimeraMouseDriver", "display": text("setting.chimeramousedriver", "Use Chimera Mouse Driver"),
+            "description": text("setting.chimeramousedriver.about", "Lets Mouse Position (with Mouse Set Position held) place "
                 "the pointer exactly in Windows 3.1, 95 and 98. Without it "
                 "the pointer is pushed through Windows' own mouse "
                 "acceleration and does not land exactly. With this on, drive"
@@ -496,213 +524,213 @@ config = {
                 "not remove an installed driver. It is not available on "
                 "PC-98 machines, which these drivers are not made for. "
                 "B:\\README.TXT says more, and B:\\INSTALL installs the driver"
-                " by hand.",
+                " by hand."),
             "type": "bool", "default": True, "sync": True
         },
         {
-            "name": "formattedHardDisk", "display": "Mount Formatted Hard Disk Drive",
-            "description": "Whether an empty, formatted, writable hard disk is put in "
+            "name": "formattedHardDisk", "display": text("setting.formattedharddisk", "Mount Formatted Hard Disk Drive"),
+            "description": text("setting.formattedharddisk.about", "Whether an empty, formatted, writable hard disk is put in "
                 "as drive C:. The disk is kept completely in memory, so make"
                 " sure your computer has enough memory. Its contents are "
                 "this core's save data (Emulator > Export Save Data). This "
-                "setting is ignored when a hard disk image is given.",
+                "setting is ignored when a hard disk image is given."),
             "type": "enum",
             "options": ["none", "21mb", "41mb", "241mb", "504mb", "2014mb"],
             "default": "none", "sync": True
         },
         {
-            "name": "forceFPSNumerator", "display": "Force FPS Numerator",
-            "description": "The top number of a forced frame rate (frames per second of"
+            "name": "forceFPSNumerator", "display": text("setting.forcefpsnumerator", "Force FPS Numerator"),
+            "description": text("setting.forcefpsnumerator.about", "The top number of a forced frame rate (frames per second of"
                 " emulated time, as a fraction). Leave it unchanged to "
                 "follow the machine's own video refresh rate, which is "
                 "recommended. To force a rate, set both this and Force FPS "
-                "Denominator.",
+                "Denominator."),
             "type": "int", "default": 0, "sync": True
         },
         {
-            "name": "forceFPSDenominator", "display": "Force FPS Denominator",
-            "description": "The bottom number of a forced frame rate. Leave it "
+            "name": "forceFPSDenominator", "display": text("setting.forcefpsdenominator", "Force FPS Denominator"),
+            "description": text("setting.forcefpsdenominator.about", "The bottom number of a forced frame rate. Leave it "
                 "unchanged to follow the machine's own video refresh rate, "
                 "which is recommended. To force a rate, set both this and "
-                "Force FPS Numerator.",
+                "Force FPS Numerator."),
             "type": "int", "default": 0, "sync": True
         },
         {
-            "name": "cpuCycles", "display": "CPU Cycles",
-            "description": "How many processor cycles the machine executes in each "
+            "name": "cpuCycles", "display": text("setting.cpucycles", "CPU Cycles"),
+            "description": text("setting.cpucycles.about", "How many processor cycles the machine executes in each "
                 "emulated millisecond. DOSBox measures processor speed this "
                 "way and not in MHz. Rough values are 315 for a 4.77 MHz "
                 "8086, 2300 for a 10 MHz 286, 22000 for a 50 MHz 486 and "
                 "200000 for a late Pentium. Lower it for a game that runs "
                 "too fast and raise it for one that stutters. It is always a"
                 " fixed number. DOSBox-X's 'auto' and 'max' follow the speed"
-                " of your computer, which a movie could not reproduce.",
+                " of your computer, which a movie could not reproduce."),
             "type": "int", "default": 22000, "min": 1, "max": 10000000, "sync": True
         },
         {
-            "name": "cpuType", "display": "CPU Type",
-            "description": "Which x86 processor the machine has. It decides which "
+            "name": "cpuType", "display": text("setting.cputype", "CPU Type"),
+            "description": text("setting.cputype.about", "Which x86 processor the machine has. It decides which "
                 "instructions a program can use, not how fast it runs (that "
                 "is CPU Cycles). 'auto' lets DOSBox-X choose the type that "
                 "fits the rest of the machine. The choices ending in "
                 "'_prefetch' also imitate the real chip's instruction queue,"
-                " which a few programs that depend on exact timing need.",
+                " which a few programs that depend on exact timing need."),
             "type": "enum", "options": CPU_TYPES, "default": "486", "sync": True
         },
         {
-            "name": "cpuCore", "display": "CPU Core",
-            "description": "Which of DOSBox-X's interpreters runs the x86 code. "
+            "name": "cpuCore", "display": text("setting.cpucore", "CPU Core"),
+            "description": text("setting.cpucore.about", "Which of DOSBox-X's interpreters runs the x86 code. "
                 "'normal' is the accurate one and is used by every machine "
                 "preset here. 'simple' is faster and only for real-mode "
                 "software. 'full' is the slowest and the most exact. "
                 "DOSBox-X's recompiling ('dynamic') cores are not included, "
                 "because they cannot be made to give the same result on "
-                "every computer, and a movie needs that.",
+                "every computer, and a movie needs that."),
             "type": "enum", "options": CPU_CORES, "default": "normal", "sync": True
         },
         {
-            "name": "videoCardType", "display": "Video Card Type",
-            "description": "Which video card the machine has. It decides which video "
+            "name": "videoCardType", "display": text("setting.videocardtype", "Video Card Type"),
+            "description": text("setting.videocardtype.about", "Which video card the machine has. It decides which video "
                 "modes a game can use. 'mda' is monochrome text only, 'cga' "
                 "has four colours and 'ega' sixteen. 'mcga' and 'vgaonly' "
                 "are the plain PS/2 and VGA cards. The svga_ choices are the"
                 " faster cards of the 1990s, and an ordinary VGA game works "
                 "well on svga_s3. 'pc98', 'pc9801' and 'pc9821' turn the "
-                "machine into an NEC PC-98 instead of an IBM PC.",
+                "machine into an NEC PC-98 instead of an IBM PC."),
             "type": "enum", "options": VIDEO_CARDS, "default": "svga_s3", "sync": True
         },
         {
-            "name": "memsizeMB", "display": "RAM Size (MB)",
-            "description": "The memory size in whole megabytes. Computers of the time "
+            "name": "memsizeMB", "display": text("setting.memsizemb", "RAM Size (MB)"),
+            "description": text("setting.memsizemb.about", "The memory size in whole megabytes. Computers of the time "
                 "had very little: 0 for a PC from before 1987 (RAM Size (KB)"
                 " then gives the real amount), 1 to 8 for the 286 and 386 "
                 "years, and 32 to 128 for a late Pentium. More memory is not"
                 " always better, because some DOS games refuse to start when"
-                " they find more than they expect.",
+                " they find more than they expect."),
             "type": "int", "default": 32, "min": 0, "max": 256, "sync": True
         },
         {
-            "name": "memsizeKB", "display": "RAM Size (KB)",
-            "description": "Kilobytes of memory ADDED to RAM Size (MB), for machines "
+            "name": "memsizeKB", "display": text("setting.memsizekb", "RAM Size (KB)"),
+            "description": text("setting.memsizekb.about", "Kilobytes of memory ADDED to RAM Size (MB), for machines "
                 "with less than a megabyte: 256 for a 1981 PC and 640 for an"
                 " XT or a PS/2 25. Leave it at 0 for anything from 1986 on, "
-                "where RAM Size (MB) is enough.",
+                "where RAM Size (MB) is enough."),
             "type": "int", "default": 0, "min": 0, "max": 262144, "sync": True
         },
         {
-            "name": "pcSpeaker", "display": "PC Speaker",
-            "description": "Whether the machine's built-in speaker is connected. Every "
+            "name": "pcSpeaker", "display": text("setting.pcspeaker", "PC Speaker"),
+            "description": text("setting.pcspeaker.about", "Whether the machine's built-in speaker is connected. Every "
                 "machine here had one, and DOS games from before sound cards"
                 " play their music on it. Turning it off silences that music"
-                " and changes nothing else.",
+                " and changes nothing else."),
             "type": "enum", "options": ["disabled", "enabled"],
             "default": "enabled", "sync": True
         },
         {
-            "name": "soundBlasterModel", "display": "Sound Blaster Model",
-            "description": "Which sound card the machine has. 'none' means no card, as "
+            "name": "soundBlasterModel", "display": text("setting.soundblastermodel", "Sound Blaster Model"),
+            "description": text("setting.soundblastermodel.about", "Which sound card the machine has. 'none' means no card, as "
                 "in PCs before 1987. 'gb' is Creative's Game Blaster. 'sb1' "
                 "and 'sb2' are the 8-bit Sound Blasters, 'sbpro1' and "
                 "'sbpro2' the stereo Sound Blaster Pro cards, and 'sb16' and"
                 " 'sb16vibra' the 16-bit ones. Choose the card the game was "
                 "written for. A game from 1990 does not use the extra "
                 "features of an sb16, and a game from 1995 may refuse an "
-                "sb1.",
+                "sb1."),
             "type": "enum", "options": SB_MODELS, "default": "sbpro2", "sync": True
         },
         {
-            "name": "soundBlasterIRQ", "display": "Sound Blaster IRQ",
-            "description": "The interrupt line (IRQ) the Sound Blaster uses. -1 uses "
+            "name": "soundBlasterIRQ", "display": text("setting.soundblasterirq", "Sound Blaster IRQ"),
+            "description": text("setting.soundblasterirq.about", "The interrupt line (IRQ) the Sound Blaster uses. -1 uses "
                 "the card model's factory default (7 for the early cards, 5 "
                 "for a Sound Blaster 16), which is what a game's setup "
-                "program expects.",
+                "program expects."),
             "type": "int", "default": -1, "min": -1, "max": 15, "sync": True
         },
         {
-            "name": "videoMemoryMB", "display": "Video Memory (MB)",
-            "description": "How many megabytes of memory the video card has. This "
+            "name": "videoMemoryMB", "display": text("setting.videomemorymb", "Video Memory (MB)"),
+            "description": text("setting.videomemorymb.about", "How many megabytes of memory the video card has. This "
                 "limits the resolution and number of colours an SVGA card "
                 "offers: 1 MB allows 1024x768 in 256 colours, 2 MB allows "
                 "640x480 in true colour and 8 MB allows 1600x1200 in true "
                 "colour. -1 uses the amount the chosen card was sold with. "
-                "Cards older than VGA have a fixed amount and ignore this.",
+                "Cards older than VGA have a fixed amount and ignore this."),
             "type": "int", "default": -1, "min": -1, "max": 64, "sync": True
         },
         {
-            "name": "vesaModelistWidthLimit", "display": "VESA Mode List Width Limit",
-            "description": "Hides VESA video modes wider than this many pixels from the"
+            "name": "vesaModelistWidthLimit", "display": text("setting.vesamodelistwidthlimit", "VESA Mode List Width Limit"),
+            "description": text("setting.vesamodelistwidthlimit.about", "Hides VESA video modes wider than this many pixels from the"
                 " list a program gets. Some DOS programs cannot handle a "
                 "long list or a very large mode. 1280 is DOSBox-X's own "
                 "limit. 0 lists every mode the card has, which a Windows 95 "
-                "or 98 display driver needs.",
+                "or 98 display driver needs."),
             "type": "int", "default": 1280, "min": 0, "max": 4096, "sync": True
         },
         {
-            "name": "vesaModelistHeightLimit", "display": "VESA Mode List Height Limit",
-            "description": "The same limit for the height of VESA video modes. 1024 is "
-                "DOSBox-X's own limit, and 0 lists every mode.",
+            "name": "vesaModelistHeightLimit", "display": text("setting.vesamodelistheightlimit", "VESA Mode List Height Limit"),
+            "description": text("setting.vesamodelistheightlimit.about", "The same limit for the height of VESA video modes. 1024 is "
+                "DOSBox-X's own limit, and 0 lists every mode."),
             "type": "int", "default": 1024, "min": 0, "max": 4096, "sync": True
         },
         {
-            "name": "dosVersion", "display": "Reported DOS Version",
-            "description": "The version number DOSBox-X's built-in DOS reports to "
+            "name": "dosVersion", "display": text("setting.dosversion", "Reported DOS Version"),
+            "description": text("setting.dosversion.about", "The version number DOSBox-X's built-in DOS reports to "
                 "programs. 'auto' lets it choose (currently 5.0, the safest "
                 "for DOS games). 6.22 is the last real MS-DOS. 7.0 and 7.1 "
                 "are the DOS versions inside Windows 95 and 98, which some "
                 "installers and programs that use long file names look for. "
                 "It has no effect when the machine starts a DOS of its own "
-                "from a disk.",
+                "from a disk."),
             "type": "enum", "options": DOS_VERSIONS, "default": "auto", "sync": True
         },
         {
-            "name": "hardDriveDataRateLimit", "display": "Hard Disk Data Rate (bytes/s)",
-            "description": "Limits the hard disk to this many bytes per second, so that"
+            "name": "hardDriveDataRateLimit", "display": text("setting.harddrivedataratelimit", "Hard Disk Data Rate (bytes/s)"),
+            "description": text("setting.harddrivedataratelimit.about", "Limits the hard disk to this many bytes per second, so that"
                 " a game takes as long to read from disk as it did on a real"
                 " machine. -1 uses DOSBox-X's own limit for a machine of the"
                 " period. 0 removes the limit, which an installation of "
-                "Windows 95 or 98 needs and which is what plain DOSBox does.",
+                "Windows 95 or 98 needs and which is what plain DOSBox does."),
             "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
         },
         {
-            "name": "floppyDriveDataRateLimit", "display": "Floppy Data Rate (bytes/s)",
-            "description": "The same limit for the floppy drives. -1 uses DOSBox-X's "
-                "own limit, and 0 makes floppy reads instant.",
+            "name": "floppyDriveDataRateLimit", "display": text("setting.floppydrivedataratelimit", "Floppy Data Rate (bytes/s)"),
+            "description": text("setting.floppydrivedataratelimit.about", "The same limit for the floppy drives. -1 uses DOSBox-X's "
+                "own limit, and 0 makes floppy reads instant."),
             "type": "int", "default": -1, "min": -1, "max": 1000000000, "sync": True
         },
         {
-            "name": "int13FakeIo", "display": "Fake INT 13h Disk I/O",
-            "description": "Makes the emulated hard disk and floppy controllers respond"
+            "name": "int13FakeIo", "display": text("setting.int13fakeio", "Fake INT 13h Disk I/O"),
+            "description": text("setting.int13fakeio.about", "Makes the emulated hard disk and floppy controllers respond"
                 " to BIOS disk calls the way real hardware does. The 32-bit "
                 "disk access of Windows 3.11 and Windows 95 needs this and "
                 "cannot use the disks without it. A plain DOS machine does "
                 "not need it, and turning it on there does nothing and costs"
                 " nothing. In DOSBox-X's terms it sets int13fakeio and "
                 "int13fakev86io on both IDE channels and int13fakev86io on "
-                "the floppy controller.",
+                "the floppy controller."),
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "cdromInsertionDelayMs", "display": "CD-ROM Insertion Delay (ms)",
-            "description": "How long the CD-ROM drive reports that it is empty after a "
+            "name": "cdromInsertionDelayMs", "display": text("setting.cdrominsertiondelayms", "CD-ROM Insertion Delay (ms)"),
+            "description": text("setting.cdrominsertiondelayms.about", "How long the CD-ROM drive reports that it is empty after a "
                 "disc is changed, in milliseconds. This stands for the time "
                 "a person takes to change the disc. 0 uses the drive's "
                 "default, which is no delay. Windows 95 and later need about"
-                " 4000 to notice a new disc automatically.",
+                " 4000 to notice a new disc automatically."),
             "type": "int", "default": 0, "min": 0, "max": 60000, "sync": True
         },
         {
-            "name": "bootDrive", "display": "Boot From",
-            "description": "Starts the machine from a drive instead of showing the DOS "
+            "name": "bootDrive", "display": text("setting.bootdrive", "Boot From"),
+            "description": text("setting.bootdrive.about", "Starts the machine from a drive instead of showing the DOS "
                 "prompt. 'a' starts from a bootable floppy image and 'c' "
                 "starts an operating system installed on the hard disk. "
                 "'none' keeps DOSBox-X's built-in DOS prompt. This setting "
-                "was added for Chimera, and BizHawk movies use 'none'.",
+                "was added for Chimera, and BizHawk movies use 'none'."),
             "type": "enum", "options": ["none", "a", "c"], "default": "none",
             "sync": True
         },
         {
-            "name": "initialDrive", "display": "Initial Drive",
-            "description": "The drive the DOS prompt starts on. 'auto' uses the first "
+            "name": "initialDrive", "display": text("setting.initialdrive", "Initial Drive"),
+            "description": text("setting.initialdrive.about", "The drive the DOS prompt starts on. 'auto' uses the first "
                 "drive the project put a disk in, looking in the order A: (a"
                 " floppy), D: (a CD) and C: (the hard disk). If a drive is "
                 "named here and has no disk, the same order is used. Z:, "
@@ -714,15 +742,15 @@ config = {
                 "this setting existed plays back on a machine whose prompt "
                 "looks different. Set it to match if that matters. It is "
                 "ignored when Boot From starts an operating system, because "
-                "the prompt is then never shown.",
+                "the prompt is then never shown."),
             "type": "enum", "options": ["auto", "a", "c", "d"], "default": "auto",
             "sync": True
         },
         # ---- devices that are nothing without their ROM (chimera additions;
         # the defaults change nothing, so a BizHawk movie's machine is intact)
         {
-            "name": "midiDevice", "display": "MIDI Device",
-            "description": "What is connected to the machine's MIDI port (MPU-401). "
+            "name": "midiDevice", "display": text("setting.mididevice", "MIDI Device"),
+            "description": text("setting.mididevice.about", "What is connected to the machine's MIDI port (MPU-401). "
                 "'none' leaves the port unconnected, as every one of these "
                 "machines was sold. 'mt32_old' is a first-generation Roland "
                 "MT-32 (control ROM version 1.07), whose peculiarities the "
@@ -730,48 +758,48 @@ config = {
                 "generation (version 2.04). 'cm32l' is a Roland CM-32L or "
                 "LAPC-I (version 1.02), an MT-32 with the extra sound "
                 "effects that later games use. Each needs its control ROM "
-                "and PCM ROM, copied from a unit you own.",
+                "and PCM ROM, copied from a unit you own."),
             "type": "enum", "options": ["none", "mt32_old", "mt32_new", "cm32l"],
             "default": "none", "sync": True
         },
         {
-            "name": "pc98FontRom", "display": "Use PC-98 Font ROM",
-            "description": "Draws PC-98 text with a real NEC character ROM (FONT.ROM) "
+            "name": "pc98FontRom", "display": text("setting.pc98fontrom", "Use PC-98 Font ROM"),
+            "description": text("setting.pc98fontrom.about", "Draws PC-98 text with a real NEC character ROM (FONT.ROM) "
                 "instead of the built-in free font. It only has an effect "
-                "when Video Card Type is one of the pc98 choices.",
+                "when Video Card Type is one of the pc98 choices."),
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "pc98SoundBios", "display": "Use PC-98 Sound BIOS",
-            "description": "Adds the BIOS of the PC-9801-26K/86 sound board (SOUND.ROM)"
+            "name": "pc98SoundBios", "display": text("setting.pc98soundbios", "Use PC-98 Sound BIOS"),
+            "description": text("setting.pc98soundbios.about", "Adds the BIOS of the PC-9801-26K/86 sound board (SOUND.ROM)"
                 " to the machine, at address CC000h. The board's FM sound "
                 "works without it. Games that call the sound BIOS need it. "
                 "It only has an effect when Video Card Type is one of the "
-                "pc98 choices.",
+                "pc98 choices."),
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "pc98RhythmSamples", "display": "Use PC-98 Rhythm Samples",
-            "description": "Gives the sound chip of the PC-9801-86 board (YM2608) its "
+            "name": "pc98RhythmSamples", "display": text("setting.pc98rhythmsamples", "Use PC-98 Rhythm Samples"),
+            "description": text("setting.pc98rhythmsamples.about", "Gives the sound chip of the PC-9801-86 board (YM2608) its "
                 "six built-in drum samples (2608_bd, sd, top, hh, tom and "
                 "rim .wav). Without them FM music plays with no drums. It "
                 "only has an effect when Video Card Type is one of the pc98 "
-                "choices.",
+                "choices."),
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "ibmRomBasic", "display": "Use IBM ROM BASIC",
-            "description": "Loads IBM's Cassette/ROM BASIC into the machine at address "
+            "name": "ibmRomBasic", "display": text("setting.ibmrombasic", "Use IBM ROM BASIC"),
+            "description": text("setting.ibmrombasic.about", "Loads IBM's Cassette/ROM BASIC into the machine at address "
                 "F6000h, below the BIOS, as an IBM 5150 has it. PC-DOS's "
                 "BASICA needs it, and so does starting the machine with no "
-                "disk.",
+                "disk."),
             "type": "bool", "default": False, "sync": True
         },
         {
-            "name": "vgaBiosRom", "display": "Use Real Video BIOS",
-            "description": "Uses a real video BIOS copied from the card chosen in Video"
+            "name": "vgaBiosRom", "display": text("setting.vgabiosrom", "Use Real Video BIOS"),
+            "description": text("setting.vgabiosrom.about", "Uses a real video BIOS copied from the card chosen in Video"
                 " Card Type, instead of the one DOSBox-X makes itself. It is"
-                " for software that examines the card's BIOS.",
+                " for software that examines the card's BIOS."),
             "type": "bool", "default": False, "sync": True
         }
     ],
@@ -782,6 +810,7 @@ config = {
 with open(os.path.join(HERE, 'waterbox.config'), 'w') as f:
     json.dump(config, f, indent=2)
     f.write('\n')
+write_texts(os.path.join(HERE, "languages", "en.json"))
 
 # ---- default_keybinds.json: BizHawk Assets/defctrl.json, verbatim ----------
 binds = {n: b for n, b in JOY}

@@ -23,6 +23,11 @@
 #include "key-order.h"
 #include "waterbox-input.h"
 
+/* A text a person reads is a key of languages/en.json, each of its
+ * arguments after a TEXT_ARG (chimera docs/translations.md). TEXT_ARG is a
+ * string of its own so the byte after it is never read as more of its hex. */
+#define TEXT_ARG "\x1f"
+
 static char g_loadError[512];
 
 /* ---- drive lights (an optional guest ABI group) ----
@@ -321,7 +326,7 @@ ECL_EXPORT int Init(void)
 				fclose(f);
 			} else {
 				snprintf(g_loadError, sizeof g_loadError,
-					"the hdd slot's '%s' is not mounted", slots.hdd[0].c_str());
+					"error.hdd_not_mounted" TEXT_ARG "%s", slots.hdd[0].c_str());
 				return 0;
 			}
 			cfg.hddSeedFile = slots.hdd[0];
@@ -340,7 +345,7 @@ ECL_EXPORT int Init(void)
 				fclose(f);
 			} else {
 				snprintf(g_loadError, sizeof g_loadError,
-					"the conf slot's '%s' is not mounted", slots.conf[0].c_str());
+					"error.conf_not_mounted" TEXT_ARG "%s", slots.conf[0].c_str());
 				return 0;
 			}
 		}
@@ -352,7 +357,7 @@ ECL_EXPORT int Init(void)
 			size = (uint64_t)ftell(f);
 			fclose(f);
 		} else {
-			snprintf(g_loadError, sizeof g_loadError, "the rom mount is not readable");
+			snprintf(g_loadError, sizeof g_loadError, "error.rom_unreadable");
 			return 0;
 		}
 		cfg.hddSeedFile = "rom";
@@ -387,7 +392,7 @@ ECL_EXPORT int Init(void)
 		size_t zstLen = 0;
 		uint64_t size = dosdrv_formatted_disk(formatted, &zst, &zstLen);
 		if (size == 0) {
-			snprintf(g_loadError, sizeof g_loadError, "unknown formatted disk '%s'", formatted);
+			snprintf(g_loadError, sizeof g_loadError, "error.bad_formatted_disk" TEXT_ARG "%s", formatted);
 			return 0;
 		}
 		cfg.hddSeedZst = zst;

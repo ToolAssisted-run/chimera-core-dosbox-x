@@ -676,7 +676,7 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 			result = openHardDiskFromZst(cfg.hddSeedZst, cfg.hddSeedZstLen, cfg.writableHDDImageSize);
 		}
 		if (!result || !_sparseHardDisk.isOpen()) {
-			if (err) *err = "could not open the hard disk drive image";
+			if (err) *err = "error.hdd_not_opened";
 			return false;
 		}
 	}
@@ -688,7 +688,7 @@ bool dosdrv_boot(const DosDrvConfig &cfg, std::string *err)
 		if (disk == nullptr || disk->resize(dosdrv_mouse_disk_size) != 0
 			|| jaffarCommon::file::MemoryFile::fwrite(dosdrv_mouse_disk_head, 1, sizeof dosdrv_mouse_disk_head, disk) != (int64_t)sizeof dosdrv_mouse_disk_head) {
 			if (disk) _memFileDirectory.fclose(disk);
-			if (err) *err = "could not make the mouse driver disk";
+			if (err) *err = "error.mouse_disk";
 			return false;
 		}
 		_memFileDirectory.fclose(disk);
