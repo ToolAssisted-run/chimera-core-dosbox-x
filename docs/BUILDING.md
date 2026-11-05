@@ -209,8 +209,7 @@ The same package file works on Linux and on Windows: Chimera's sandbox
 (miniBox) runs the guest inside it on either.
 
 Released packages are on this repository's Releases page
-(https://github.com/ToolAssisted-run/chimera-core-dosbox-x/releases): a
-rolling `dev` release on every green push to `main`, and a dated
+(https://github.com/ToolAssisted-run/chimera-core-dosbox-x/releases): a dated
 `nightly-YYYY-MM-DD` release from the scheduled run when `main` moved since the
 last one.
 
