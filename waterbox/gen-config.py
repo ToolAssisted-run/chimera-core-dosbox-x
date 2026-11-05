@@ -456,6 +456,7 @@ config = {
     "systemNames": SYSTEM_NAMES,
     "author": "DOSBox-X team; chimera port by Sergio Martin",
     "url": "https://github.com/ToolAssisted-run/chimera-core-dosbox-x",
+    "runsOn": ["windows-x86_64", "linux-x86_64", "macos-x86_64"],
     "romFile": "rom",
     "deterministic": True,
     "memoryLayoutMiB": [256, 16, 16, 64, 1024],
