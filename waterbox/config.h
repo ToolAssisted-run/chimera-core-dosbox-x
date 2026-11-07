@@ -55,10 +55,13 @@
 #define C_DIRECTSERIAL 1
 
 /* Define to 1 to use x86/x64 dynamic cpu core */
-#define C_DYNAMIC_X86 1
-
 /* Define to 1 to use recompiling cpu core */
+/* chimera: built for x86-64 only; the core offers neither (cpuCore is normal,
+   full or simple), and on aarch64 there is none */
+#if defined(__x86_64__)
+#define C_DYNAMIC_X86 1
 #define C_DYNREC 1
+#endif
 
 /* Targeting Emscripten */
 /* #undef C_EMSCRIPTEN */
@@ -73,7 +76,11 @@
 #define C_FPU 1
 
 /* Define to 1 to use a x86/x64 assembly fpu core */
+/* chimera: on aarch64 the emulated FPU is DOSBox-X's C one, which computes in
+   double precision where the x87 one keeps 80 bits */
+#if defined(__x86_64__)
 #define C_FPU_X86 1
+#endif
 
 /* Define to 1 to enable freetype support */
 /* #undef C_FREETYPE */
@@ -166,7 +173,13 @@
 /* #undef C_SSHOT */
 
 /* The type of cpu this target has */
+#if defined(__x86_64__)
 #define C_TARGETCPU X86_64
+#elif defined(__aarch64__)
+#define C_TARGETCPU ARMV8LE
+#else
+#error "this core is built for x86-64 or aarch64"
+#endif
 
 /* Define to 1 to use a unaligned memory access */
 #define C_UNALIGNED_MEMORY 1
