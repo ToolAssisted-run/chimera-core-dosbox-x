@@ -38,7 +38,7 @@ jobs:
   core-gate:
     # Once per CPU, each on a runner of that CPU: a package is machine code for
     # one CPU, and miniBox's guest toolchain builds for the CPU it runs on.
-    name: "core gate (native == sandbox == rerecord)" (${{ matrix.arch }})
+    name: "core gate (native == sandbox == rerecord) (${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
