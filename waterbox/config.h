@@ -56,12 +56,13 @@
 
 /* Define to 1 to use x86/x64 dynamic cpu core */
 /* Define to 1 to use recompiling cpu core */
-/* chimera: built for x86-64 only; the core offers neither (cpuCore is normal,
-   full or simple), and on aarch64 there is none */
+/* chimera: cpuCore "dynamic" (chimera#316) is dynamic_x86 on x86-64; on
+   aarch64 there is no dynamic_x86, and "dynamic" is dynrec, whose ARMv8
+   back end (risc_armv8le.h) leaves x18 and TPIDR_EL0 alone */
 #if defined(__x86_64__)
 #define C_DYNAMIC_X86 1
-#define C_DYNREC 1
 #endif
+#define C_DYNREC 1
 
 /* Targeting Emscripten */
 /* #undef C_EMSCRIPTEN */
