@@ -36,9 +36,21 @@ env:
 jobs:
 
   core-gate:
-    name: "core gate (native == sandbox == rerecord)"
-    runs-on: ubuntu-latest
+    # Once per CPU, each on a runner of that CPU: a package is machine code for
+    # one CPU, and miniBox's guest toolchain builds for the CPU it runs on.
+    name: "core gate (native == sandbox == rerecord) (${{ matrix.arch }})"
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            qt: gcc_64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            qt: gcc_arm64
     steps:
       - uses: actions/checkout@v6
         with:
@@ -67,7 +79,7 @@ jobs:
           path: |
             chimera-checkout/extern/chimera-common-minibox/build/meson-linux
             chimera-checkout/extern/chimera-common-minibox/build/meson-cpp
-          key: guest-cpp-${{ runner.os }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/.git') }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/meson.build') }}
+          key: guest-cpp-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/.git') }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/meson.build') }}
 
       - name: Build miniBox (host + C++ guest toolchain)
         run: |
@@ -87,6 +99,10 @@ jobs:
           MINIBOX_DIR="$PWD/chimera-checkout/extern/chimera-common-minibox" sh waterbox/setup-guest.sh \
             -- -Dminibox_dir="$PWD/chimera-checkout/extern/chimera-common-minibox"
           ninja -C build/meson-guest
+          # an aarch64 guest reads its thread pointer from the machine's slot, not
+          # TPIDR_EL0 (miniBox's MACHINE-SPEC, "aarch64"); the host refuses one not rewritten so
+          mb="$(sed -n "s/^minibox_dir = '\(.*\)'$/\1/p" build/guest-cross.ini)"
+          [ "$(uname -m)" = x86_64 ] || python3 "$mb/source/guest/wbx-tp-rewrite.py" build/meson-guest/core.wbx
 
       - name: Core gate
         run: ./waterbox/run-gate.sh
@@ -94,7 +110,7 @@ jobs:
       - name: Upload core.wbx
         uses: actions/upload-artifact@v7
         with:
-          name: core-wbx
+          name: core-wbx-${{ matrix.arch }}
           path: |
             build/meson-guest/core.wbx
             waterbox/waterbox.config
@@ -104,7 +120,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: core-gate-work
+          name: core-gate-work-${{ matrix.arch }}
           path: waterbox/tests/work/
 
   frontend-gate:
@@ -112,9 +128,21 @@ jobs:
     # the machine needs nothing provisioned.
     # The package is BUILT here either way, which is what publishes the artifact
     # and proves the packaging is deterministic.
-    name: frontend gate (Chimera)
-    runs-on: ubuntu-latest
+    # Once per CPU, each on a runner of that CPU: a package is machine code for
+    # one CPU, and miniBox's guest toolchain builds for the CPU it runs on.
+    name: frontend gate (Chimera) (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            qt: gcc_64
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            qt: gcc_arm64
     steps:
       - uses: actions/checkout@v6
         with:
@@ -137,7 +165,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/qt
-          key: qt-6.12.0-linux-aqt-3.3.0
+          key: qt-6.12.0-linux-${{ matrix.arch }}-aqt-3.3.0
 
       - name: Build Chimera (the engine, chimera-run and the window)
         run: chimera-checkout/tools/ci-chimera.sh "$HOME/qt"
@@ -148,7 +176,7 @@ jobs:
           path: |
             chimera-checkout/extern/chimera-common-minibox/build/meson-linux
             chimera-checkout/extern/chimera-common-minibox/build/meson-cpp
-          key: guest-cpp-${{ runner.os }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/.git') }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/meson.build') }}
+          key: guest-cpp-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/.git') }}-${{ hashFiles('chimera-checkout/extern/chimera-common-minibox/meson.build') }}
 
       - name: Build miniBox (host + C++ guest toolchain)
         run: |
@@ -189,7 +217,7 @@ jobs:
       - name: Publish the core package
         uses: actions/upload-artifact@v7
         with:
-          name: dosbox-x-${{ github.sha }}
+          name: dosbox-x-${{ github.sha }}-${{ matrix.arch }}
           path: chimera-checkout/build/Cores/dosbox-x.chimeraCore
           if-no-files-found: error
 
@@ -197,7 +225,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: frontend-gate-work
+          name: frontend-gate-work-${{ matrix.arch }}
           path: waterbox/tests/work/
 
   publish:
@@ -220,3 +248,4 @@ jobs:
       core-id: dosbox-x
       artifact: dosbox-x-${{ github.sha }}
       package: dosbox-x.chimeraCore
+      arches: x86_64 aarch64

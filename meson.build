@@ -30,6 +30,13 @@ quiet = [
   '-Wno-format-security',
 ]
 add_project_arguments(defs + quiet, language: ['c', 'cpp'])
+# On aarch64 GCC fuses a multiply and an add into one instruction unless told
+# not to, which rounds once where the guest (built with -ffp-contract=off)
+# rounds twice; there the emulated FPU is C doubles, so both builds keep them
+# apart. x86-64 is unchanged.
+if not meson.is_cross_build() and host_machine.cpu_family() == 'aarch64'
+  add_project_arguments('-ffp-contract=off', language: ['c', 'cpp'])
+endif
 
 inc = include_directories(
   'waterbox',
@@ -380,7 +387,7 @@ dosbox_sources = files(
   'extern/dosbox-x/src/hardware/snd_pc98/cbus/board26k.c',
   'extern/dosbox-x/src/hardware/snd_pc98/generic/keydisp.c',
   'extern/dosbox-x/src/hardware/snd_pc98/x11/dosio.c',
-  'extern/vendored/libco/amd64.c',
+  'extern/vendored/libco/' + (host_machine.cpu_family() == 'aarch64' ? 'aarch64.c' : 'amd64.c'),
   'extern/vendored/SDL2/src/SDL.c',
   'extern/vendored/SDL2/src/SDL_assert.c',
   'extern/vendored/SDL2/src/SDL_dataqueue.c',

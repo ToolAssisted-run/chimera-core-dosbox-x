@@ -32,6 +32,10 @@ chimera_root="$(cd "$chimera_root" && pwd)"
 # the guest, via the meson cross build
 [ -f "$root/build/meson-guest/build.ninja" ] || MINIBOX_DIR="$mb" sh "$here/setup-guest.sh"
 ninja -C "$root/build/meson-guest" core.wbx
+# An aarch64 guest reads its thread pointer from the machine's slot, not from
+# TPIDR_EL0 (miniBox's MACHINE-SPEC, "aarch64"); the host refuses one that
+# was not rewritten so.
+[ "$(uname -m)" = x86_64 ] || python3 "$mb/source/guest/wbx-tp-rewrite.py" "$root/build/meson-guest/core.wbx"
 sh "$mb/source/guest/check-wbx.sh" "$root/build/meson-guest/core.wbx"
 
 # the declaration is what a user's wizard reads, so it is checked before it is
@@ -103,7 +107,7 @@ json.dump({
                "origin": git("config", "--get", "remote.origin.url", default=""),
                "dirty": "-dirty" in "$core_version"},
     "toolchain": {"compiler": "gcc $gccver", "libstdc++": "$gccver",
-                  "binutils": "$binutils_version", "target": "x86_64-linux-musl",
+                  "binutils": "$binutils_version", "target": "$(uname -m)-linux-musl",
                   "musl": "$musl_version"},
     "guestKit": {"name": "miniBox", "commit": "$guest_kit"},
     "upstream": {"name": "DOSBox-X", "pin": "$dosbox_pin"},
