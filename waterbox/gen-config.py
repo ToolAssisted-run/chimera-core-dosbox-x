@@ -311,11 +311,12 @@ VIDEO_CARDS = [
 SB_MODELS = ["none", "sb1", "sb2", "sbpro1", "sbpro2", "sb16",
              "sb16vibra", "gb", "ess688", "reveal_sc400"]
 
-# DOSBox-X's own cores minus the JIT ones: dynamic_x86 is a recompiler and, like
-# PPSSPP's JIT, cannot be cross-build deterministic, so it is not compiled in
-# (docs/PLAN.md section 10). "auto" would only ever resolve to normal here, and
-# a no-op option that looks like a choice is worse than no option.
-CPU_CORES = ["normal", "full", "simple"]
+# DOSBox-X's own cores. "dynamic" is its recompiler (dynamic_x86 on x86-64,
+# dynrec on aarch64), offered with a warning that a movie made with it may not
+# play back the same on another computer (user-decided, 2026-10-19,
+# chimera#316; docs/PLAN.md). "auto" would only ever resolve to normal here,
+# and a no-op option that looks like a choice is worse than no option.
+CPU_CORES = ["normal", "full", "simple", "dynamic"]
 
 # [dos] ver, as base.conf documents it. "auto" is DOSBox-X's own word for
 # "pick a DOS kernel version", and it is what an unset ver means.
@@ -580,13 +581,14 @@ config = {
         },
         {
             "name": "cpuCore", "display": text("setting.cpucore", "CPU Core"),
-            "description": text("setting.cpucore.about", "Which of DOSBox-X's interpreters runs the x86 code. "
-                "'normal' is the accurate one and is used by every machine "
-                "preset here. 'simple' is faster and only for real-mode "
-                "software. 'full' is the slowest and the most exact. "
-                "DOSBox-X's recompiling ('dynamic') cores are not included, "
-                "because they cannot be made to give the same result on "
-                "every computer, and a movie needs that."),
+            "description": text("setting.cpucore.about", "Which of DOSBox-X's cores runs the x86 code. "
+                "'normal' is the accurate interpreter and is used by every "
+                "machine preset here. 'simple' is faster and only for "
+                "real-mode software. 'full' is the slowest and the most exact. "
+                "'dynamic' is DOSBox-X's recompiler, the fastest: it turns the "
+                "program's code into code for your computer. A movie made with "
+                "it may not play back the same on another computer, so choose "
+                "it for speed, not for a run others are to replay."),
             "type": "enum", "options": CPU_CORES, "default": "normal", "sync": True
         },
         {

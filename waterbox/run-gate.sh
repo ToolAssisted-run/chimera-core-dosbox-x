@@ -840,7 +840,9 @@ d1="$(timeout 900 "$rw" "$core" $dyn --frames "$frames" 2>/dev/null | digests)"
 d2="$(timeout 900 "$rw" "$core" $dyn --frames "$frames" 2>/dev/null | digests)"
 drr="$(timeout 1800 "$rw" "$core" $dyn --frames "$frames" --rerecord 2>/dev/null | digests)"
 dnorm="$(timeout 900 "$rw" "$core" --frames "$frames" 2>/dev/null | digests)"
-if [ -z "$d1" ] || [ -z "$dnorm" ]; then
+if ! python3 -c "import json,sys; c=json.load(open(sys.argv[1])); sys.exit(0 if any(s.get('name')=='cpuCore' and 'dynamic' in s.get('options',[]) for s in c['settings']) else 1)" "$here/waterbox.config"; then
+	echo "FAIL dynamic (the package does not offer it: cpuCore has no 'dynamic' in waterbox.config)"; fail=1
+elif [ -z "$d1" ] || [ -z "$dnorm" ]; then
 	echo "FAIL dynamic (a run produced no digests)"; fail=1
 elif [ "$d1" != "$d2" ]; then
 	echo "FAIL dynamic (two runs on the dynamic core differ)"; fail=1
