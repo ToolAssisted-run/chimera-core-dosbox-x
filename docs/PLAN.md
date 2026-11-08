@@ -1045,6 +1045,14 @@ hand, the native build and the sandbox give the same digests on it too. Not
 measured: another computer, and a program that works the processor hard
 enough to show the speed (at the DOS prompt the two take the same time).
 
+Lost and put back (2026-11-08): the option was added to waterbox.config by
+hand and not to gen-config.py's list, so the next regeneration took it out
+again, and from then on the window did not offer it; the gate's leg passed
+all along, because the sandbox runner passes the setting directly. The
+generator now lists `dynamic` with the description above (and every language
+table has it), and the leg fails when the package does not offer it. On
+aarch64, `dynamic` is DOSBox-X's dynrec (no dynamic_x86 there).
+
 ## The keyboard in rows (2026-10-21, chimera#337)
 
 The 102 keys were listed in DOSBox-X's own KBD_KEYS order (the digits, the

@@ -77,7 +77,7 @@
 		"setting.chimeramousedriver": "使用 Chimera 鼠标驱动",
 		"setting.chimeramousedriver.about": "让“鼠标位置”（按住“鼠标设定位置”时）在 Windows 3.1、95 和 98 中精确放置指针。若不开启，指针会经过 Windows 自身的鼠标加速，无法准确到位。开启后，B: 驱动器存放 Chimera 的鼠标驱动及其安装程序。在其他任何操作开始前，安装程序会把正确的驱动放入 C: 上找到的 Windows 中（Windows 95 和 98 使用由 WIN.INI 启动的 CHIMABS.EXE，Windows 3.1 使用 VBADOS 的 VBMOUSE.DRV）。仅当驱动尚不存在时才写入 C:，且不会改动没有 Windows 的磁盘。关闭此项会移除 B: 驱动器，但不会删除已安装的驱动。PC-98 机器不支持此功能，这些驱动并非为其制作。B:\\README.TXT 有更多说明，B:\\INSTALL 可手动安装驱动。",
 		"setting.cpucore": "CPU 核心",
-		"setting.cpucore.about": "由 DOSBox-X 的哪个解释器运行 x86 代码。'normal' 是精确的解释器，本处每个机型预设都使用它。'simple' 更快，但仅适用于实模式软件。'full' 最慢也最精确。DOSBox-X 的重编译（'dynamic'）核心不包括在内，因为它们无法保证在每台电脑上得到相同结果，而录像需要这一点。",
+		"setting.cpucore.about": "由 DOSBox-X 的哪个核心运行 x86 代码。'normal' 是准确的解释器，这里的每个机器预设都使用它。'simple' 更快，只适用于实模式软件。'full' 最慢也最精确。'dynamic' 是 DOSBox-X 的重编译器，最快：它把程序的代码转换成适合你电脑的代码。用它制作的影片在另一台电脑上可能无法同样回放，所以为了速度而选它，不要用于需要他人回放的流程。",
 		"setting.cpucycles": "CPU 周期数",
 		"setting.cpucycles.about": "机器在每个模拟毫秒内执行的处理器周期数。DOSBox 以此方式衡量处理器速度，而不用 MHz。大致取值：4.77 MHz 的 8086 为 315，10 MHz 的 286 为 2300，50 MHz 的 486 为 22000，后期的 Pentium 为 200000。游戏运行过快则调低，卡顿则调高。它始终是固定数字。DOSBox-X 的 'auto' 和 'max' 会跟随您电脑的速度，录像无法复现这一点。",
 		"setting.cputype": "CPU 类型",
